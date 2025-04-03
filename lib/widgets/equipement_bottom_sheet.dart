@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
-import 'package:helpdeskfrontend/screens/typeEquip_list_screen.dart';
+import 'package:helpdeskfrontend/screens/Admin_Screens/Equipments/equipement_list_screen.dart';
+import 'package:helpdeskfrontend/screens/Admin_Screens/Type_Equipments/typeEquip_list_screen.dart';
 import 'package:helpdeskfrontend/theme/theme.dart';
 import 'package:provider/provider.dart';
 
@@ -11,7 +12,7 @@ class EquipementBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final ThemeData theme = Theme.of(context);
-    final CustomColors? customColors = theme.extension<CustomColors>();
+    theme.extension<CustomColors>();
 
     return Container(
       height: 200, // Hauteur du BottomSheet
@@ -46,7 +47,10 @@ class EquipementBottomSheet extends StatelessWidget {
                 : Colors.black, // Texte noir en mode clair
             onPressed: () {
               Navigator.pop(context); // Fermer le BottomSheet
-              // Ajouter votre logique ici
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => EquipmentListPage()),
+              );
             },
           ),
           // Deuxième carte

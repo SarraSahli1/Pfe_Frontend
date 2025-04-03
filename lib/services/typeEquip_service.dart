@@ -7,7 +7,7 @@ import 'package:mime/mime.dart';
 
 class TypeEquipmentService {
   final String baseUrl =
-      "http://192.168.1.18:3000"; // Remplacez par l'URL de votre API
+      "http://192.168.1.16:3000"; // Remplacez par l'URL de votre API
 
   // Méthode pour créer un TypeEquipment
   Future<Map<String, dynamic>> createTypeEquipment({

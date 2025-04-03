@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:helpdeskfrontend/screens/First_Screens/firstpage.dart';
 import 'provider/theme_provider.dart'; // Import your ThemeProvider
-import 'screens/welcome_screen.dart'; // Import your WelcomeScreen
 import 'package:provider/provider.dart'; // Add this import
 
 void main() {
@@ -27,7 +27,7 @@ class MyApp extends StatelessWidget {
       darkTheme: ThemeData.dark(), // Dark theme
       themeMode:
           themeProvider.themeMode, // Use the theme mode from the provider
-      home: const WelcomeScreen(),
+      home: const Firstpage(),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:helpdeskfrontend/theme/theme.dart';
+import 'package:provider/provider.dart';
+import 'package:helpdeskfrontend/provider/theme_provider.dart';
 
 class SearchInput extends StatelessWidget {
   final ValueChanged<String>? onChanged;
@@ -9,63 +10,53 @@ class SearchInput extends StatelessWidget {
   const SearchInput({
     Key? key,
     this.onChanged,
-    this.placeholder = 'Find User',
+    this.placeholder = 'Search equipment...',
     this.controller,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenWidth <= 640;
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
-    // Récupérer les couleurs personnalisées du thème
-    final customColors = Theme.of(context).extension<CustomColors>();
-
-    return Container(
-      width: isSmallScreen ? double.infinity : 335,
-      height: isSmallScreen ? 40 : 48,
-      constraints: const BoxConstraints(maxWidth: 335),
-      decoration: BoxDecoration(
-        color: customColors?.userCardBackground ??
-            Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(isSmallScreen ? 8 : 12),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Icon(
-            Icons.search,
-            color: customColors?.userCardSecondaryText ??
-                Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: TextFormField(
-              controller: controller,
-              onChanged: onChanged,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                color: customColors?.userCardText ??
-                    Theme.of(context).colorScheme.onSurface,
-                fontSize: isSmallScreen ? 13 : 14,
-              ),
-              decoration: InputDecoration(
-                hintText: placeholder,
-                hintStyle: TextStyle(
-                  fontFamily: 'Poppins',
-                  color: customColors?.userCardSecondaryText ??
-                      Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
-                  fontSize: isSmallScreen ? 13 : 14,
-                ),
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
+          borderRadius: BorderRadius.circular(25.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          decoration: InputDecoration(
+            hintText: placeholder,
+            hintStyle: TextStyle(
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
+              fontFamily: 'Poppins',
+            ),
+            prefixIcon: Icon(
+              Icons.search,
+              color: isDarkMode ? Colors.white : Colors.grey[600],
+            ),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 15.0,
             ),
           ),
-        ],
+          style: TextStyle(
+            color: isDarkMode ? Colors.white : Colors.black,
+            fontFamily: 'Poppins',
+          ),
+        ),
       ),
     );
   }

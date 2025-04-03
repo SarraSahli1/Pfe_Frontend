@@ -1,13 +1,16 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
-import 'package:mime/mime.dart'; // For MIME type detection
+import 'package:mime/mime.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class AuthService {
-  final String baseUrl =
-      "http://192.168.1.18:3000"; // Replace with your backend URL
+  final String baseUrl = "http://192.168.1.16:3000";
+  static const String _tokenKey = 'user_token';
+  static const String _userIdKey = 'user_id';
+  static const String _userDataKey = 'user_data';
 
-  // Method to register a user
   Future<Map<String, dynamic>> registerUser({
     required String firstName,
     required String lastName,
@@ -41,7 +44,6 @@ class AuthService {
       ..fields['about'] = about ?? ''
       ..fields['company'] = company ?? '';
 
-    // Add profile picture if provided
     if (image != null) {
       var profileImageFile = await http.MultipartFile.fromPath(
         'profilePicture',
@@ -52,7 +54,6 @@ class AuthService {
       request.files.add(profileImageFile);
     }
 
-    // Add signature if provided
     if (signature != null) {
       var signatureFile = await http.MultipartFile.fromPath(
         'signature',
@@ -79,13 +80,11 @@ class AuthService {
     }
   }
 
-  // Method to log in a user
   Future<Map<String, dynamic>> loginUser({
     required String email,
     required String password,
   }) async {
-    final Uri url =
-        Uri.parse('$baseUrl/auth/login'); // Adjust the endpoint if necessary
+    final Uri url = Uri.parse('$baseUrl/auth/login');
 
     try {
       final response = await http.post(
@@ -99,11 +98,14 @@ class AuthService {
 
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
+        final token = responseData['accessToken'];
+        final payload = responseData['payload'] ?? JwtDecoder.decode(token);
+        await saveAuthData(token, payload);
         return {
           "success": true,
           "message": "Login successful",
-          "payload": responseData['payload'],
-          "accessToken": responseData['accessToken'],
+          "payload": payload,
+          "accessToken": token,
           "refreshToken": responseData['refreshToken'],
         };
       } else {
@@ -118,33 +120,64 @@ class AuthService {
     }
   }
 
-  // Method to verify a token
-  Future<Map<String, dynamic>> verifyToken(String accessToken) async {
-    final Uri url =
-        Uri.parse('$baseUrl/auth/verify'); // Adjust the endpoint if necessary
+  Future<void> saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
 
-    try {
-      final response = await http.get(
-        url,
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-        },
-      );
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_tokenKey);
+  }
 
-      if (response.statusCode == 200) {
-        return {
-          "success": true,
-          "message": "Token is valid",
-        };
-      } else {
-        final responseData = jsonDecode(response.body);
-        return {
-          "success": false,
-          "message": responseData['message'] ?? "Token verification failed",
-        };
+  Future<bool> isLoggedIn() async {
+    final token = await getToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+    await prefs.remove(_userIdKey);
+    await prefs.remove(_userDataKey);
+  }
+
+  Future<void> saveAuthData(String token, Map<String, dynamic> payload) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+
+    if (payload['_id'] != null) {
+      await prefs.setString(_userIdKey, payload['_id']);
+    } else {
+      final decodedToken = JwtDecoder.decode(token);
+      if (decodedToken['_id'] != null) {
+        await prefs.setString(_userIdKey, decodedToken['_id']);
       }
-    } catch (e) {
-      return {"success": false, "message": "An error occurred: $e"};
     }
+
+    await prefs.setString(_userDataKey, jsonEncode(payload));
+  }
+
+  Future<String?> getCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString(_userIdKey);
+    if (userId != null) return userId;
+
+    final userDataString = prefs.getString(_userDataKey);
+    if (userDataString != null) {
+      final userData = jsonDecode(userDataString);
+      if (userData['_id'] != null) return userData['_id'];
+    }
+
+    final token = await getToken();
+    if (token != null) {
+      final decodedToken = JwtDecoder.decode(token);
+      if (decodedToken['_id'] != null) {
+        await prefs.setString(_userIdKey, decodedToken['_id']);
+        return decodedToken['_id'];
+      }
+    }
+
+    return null;
   }
 }

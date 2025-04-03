@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/models/user.dart';
 import 'package:http/http.dart' as http;
 
 class UserService {
-  final String baseUrl = "http://192.168.1.18:3000";
+  final String baseUrl = "http://192.168.1.16:3000";
 
   String getImageUrl(String fileId) {
     return '$baseUrl/files/$fileId';
@@ -18,32 +19,44 @@ class UserService {
     }
   }
 
-  Future<List<dynamic>> getAllUsers(
-      {bool onlyValid = false, bool onlyInvalid = false}) async {
-    final Uri url =
-        Uri.parse('$baseUrl/user/all?valid=$onlyValid&invalid=$onlyInvalid');
+  Future<List<dynamic>> getAllUsers() async {
     try {
-      final response = await http.get(url);
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/all'), // Adaptez cette URL à votre endpoint
+      );
 
       if (response.statusCode == 200) {
-        final List<dynamic> users = jsonDecode(response.body);
-        return users;
+        return json.decode(response.body);
       } else {
-        throw Exception('Failed to load users');
+        throw Exception('Failed to load users: ${response.statusCode}');
       }
     } catch (e) {
-      throw Exception('Error: $e');
+      throw Exception('Failed to load users: $e');
     }
   }
 
   Future<User> getUserById(String userId) async {
-    final response =
-        await http.get(Uri.parse('$baseUrl/user/getUserById/$userId'));
-    if (response.statusCode == 200) {
-      final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
-      return User.fromMap(jsonResponse);
-    } else {
-      throw Exception('Failed to load user: ${response.statusCode}');
+    try {
+      // Extract just the ID if the input contains the full object
+      final cleanId = userId.contains('_id')
+          ? userId.split('_id:')[1].split(',')[0].trim()
+          : userId;
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/getUserById/$cleanId'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        return User.fromMap(jsonResponse);
+      } else {
+        debugPrint('API Error: ${response.statusCode} - ${response.body}');
+        throw Exception('Failed to load user: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error in getUserById: $e');
+      rethrow;
     }
   }
 
@@ -190,6 +203,25 @@ class UserService {
         await http.delete(Uri.parse('$baseUrl/user/reject/$userId'));
     if (response.statusCode != 200) {
       throw Exception('Failed to reject user');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllClients() async {
+    final Uri url = Uri.parse('$baseUrl/client/getListClient');
+
+    try {
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final List<dynamic> responseData = jsonDecode(response.body);
+        return responseData.cast<
+            Map<String, dynamic>>(); // Convertir en List<Map<String, dynamic>>
+      } else {
+        throw Exception(
+            'Échec du chargement des clients: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('Erreur lors de la récupération des clients: $e');
     }
   }
 }

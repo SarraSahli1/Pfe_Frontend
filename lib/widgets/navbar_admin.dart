@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:helpdeskfrontend/screens/admin_users_list.dart';
-import 'package:helpdeskfrontend/widgets/equipement_bottom_sheet.dart'; // Import the new widget
+import 'package:helpdeskfrontend/screens/Admin_Screens/Users/admin_users_list.dart';
+import 'package:helpdeskfrontend/screens/Admin_Screens/Tickets/admin_tickets_list.dart'; // Ajoutez cette importation
+import 'package:helpdeskfrontend/widgets/equipement_bottom_sheet.dart';
 
 class NavbarAdmin extends StatelessWidget {
   final int currentIndex;
@@ -13,7 +14,7 @@ class NavbarAdmin extends StatelessWidget {
   }) : super(key: key);
 
   void _navigateToPage(BuildContext context, int index) {
-    print('Navigating to index: $index'); // Debug log
+    print('Navigating to index: $index');
     switch (index) {
       case 0: // Home
         print('Navigating to Home');
@@ -28,18 +29,20 @@ class NavbarAdmin extends StatelessWidget {
         break;
       case 2: // Equipements
         print('Showing Equipements BottomSheet');
-        EquipementBottomSheet.show(
-            context); // Show the BottomSheet without navigation
-        return; // Do not update the index or navigate further
+        EquipementBottomSheet.show(context);
+        return;
       case 3: // Tickets
         print('Navigating to Tickets');
-        Navigator.pushReplacementNamed(context, '/tickets');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const AdminTicketsListPage()),
+        );
         break;
       default:
-        print('Unknown index: $index'); // Debug log
+        print('Unknown index: $index');
         break;
     }
-    onTap(index); // Update parent state if necessary (except for Equipements)
+    onTap(index);
   }
 
   @override

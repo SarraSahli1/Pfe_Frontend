@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 // Définition des couleurs personnalisées
 class CustomColors extends ThemeExtension<CustomColors> {
@@ -87,6 +88,10 @@ final lightMode = ThemeData(
   useMaterial3: true,
   brightness: Brightness.light,
   colorScheme: lightColorScheme,
+  textTheme: GoogleFonts.poppinsTextTheme(
+    // Intégration de Poppins
+    ThemeData.light().textTheme,
+  ),
   extensions: <ThemeExtension<dynamic>>[
     CustomColors(
       userListBackground: const Color(0xFFFCFDF6),
@@ -102,6 +107,10 @@ final darkMode = ThemeData(
   useMaterial3: true,
   brightness: Brightness.dark,
   colorScheme: darkColorScheme,
+  textTheme: GoogleFonts.poppinsTextTheme(
+    // Intégration de Poppins
+    ThemeData.light().textTheme,
+  ),
   extensions: <ThemeExtension<dynamic>>[
     CustomColors(
       userListBackground: const Color(0xFF242E3E),
