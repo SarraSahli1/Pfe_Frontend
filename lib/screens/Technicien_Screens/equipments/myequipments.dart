@@ -1,11 +1,12 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/screens/Client_Screens/Equipments/editMyEquipment.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Equipments/viewEquipmentDetail.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
 import 'package:helpdeskfrontend/services/equipement_service.dart';
 import 'package:helpdeskfrontend/services/typeEquip_service.dart';
 import 'package:helpdeskfrontend/widgets/navbar_client.dart';
+import 'package:helpdeskfrontend/widgets/navbar_technicien.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 import 'package:provider/provider.dart';
 
@@ -324,11 +325,94 @@ class _MyEquipmentPageState extends State<MyEquipmentPage> {
     );
   }
 
+  Future<void> _deleteEquipment(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Equipment',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to delete this equipment?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Delete',
+                style: TextStyle(
+                    color: Colors.orange, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        setState(() => _isLoading = true);
+        final response = await _equipmentService.deleteEquipment(id: id);
+        _showSuccessSnackBar(response['message']);
+        await _fetchMyEquipment();
+      } catch (e) {
+        _showErrorSnackBar('Error while deleting: $e');
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _editEquipment(dynamic equipment) {
+    final typeEquipment = equipment['TypeEquipment'];
+    String? typeEquipmentId;
+
+    if (typeEquipment is Map<String, dynamic>) {
+      typeEquipmentId = typeEquipment['_id'];
+    } else if (typeEquipment is String) {
+      typeEquipmentId = typeEquipment;
+    }
+
+    DateTime? inventoryDate;
+    if (equipment['inventoryDate'] != null) {
+      inventoryDate = DateTime.tryParse(equipment['inventoryDate']);
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditMyEquipment(
+          id: equipment['_id'],
+          serialNumber: equipment['serialNumber'] ?? '',
+          designation: equipment['designation'] ?? '',
+          version: equipment['version'] ?? '',
+          barcode: equipment['barcode'] ?? '',
+          inventoryDate: inventoryDate,
+          typeEquipmentId: typeEquipmentId,
+          reference: equipment['reference'] ?? 'OPM_APP',
+        ),
+      ),
+    ).then((shouldRefresh) {
+      if (shouldRefresh == true) _fetchMyEquipment();
+    });
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: Colors.orange,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -345,108 +429,154 @@ class _MyEquipmentPageState extends State<MyEquipmentPage> {
         ? typeEquipment['typeName']?.toString() ?? 'Unknown type'
         : 'Unknown type';
 
-    return InkWell(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ViewEquipmentPage(
-              equipmentId: equipment['_id'],
-            ),
-          ),
-        );
-      },
-      child: Card(
-        margin: EdgeInsets.only(bottom: 16.0),
-        elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15.0),
-        ),
-        color: isDarkMode ? Color(0xFF3A4352) : Colors.white,
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                equipment['designation']?.toString() ?? 'Not specified',
-                style: TextStyle(
-                  fontSize: 18.0,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : Colors.black87,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Divider(color: Colors.grey[400], height: 20),
-              Row(
-                children: [
-                  Text(
-                    'Serial Number: ',
+    return Card(
+      margin: EdgeInsets.only(bottom: 16.0),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15.0),
+      ),
+      color: isDarkMode ? Color(0xFF3A4352) : Colors.white,
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    equipment['designation']?.toString() ?? 'Not specified',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                  ),
-                  Text(
-                    equipment['serialNumber']?.toString() ?? 'Not specified',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: isDarkMode ? Colors.white : Colors.black,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 8),
-              Row(
-                children: [
-                  Text(
-                    'Type: ',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                  ),
-                  Text(
-                    typeName,
-                    style: TextStyle(
-                      fontSize: 14,
+                      fontSize: 18.0,
+                      fontWeight: FontWeight.bold,
                       color: isDarkMode ? Colors.white : Colors.black87,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ),
-              if (equipment['barcode']?.toString().isNotEmpty ?? false)
-                Column(
-                  children: [
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text(
-                          'Barcode: ',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: isDarkMode
-                                ? Colors.grey[400]
-                                : Colors.grey[600],
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert,
+                      color: isDarkMode ? Colors.white : Colors.grey),
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _editEquipment(equipment);
+                    } else if (value == 'view') {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ViewEquipmentPage(
+                            equipmentId: equipment['_id'],
                           ),
                         ),
-                        Text(
-                          equipment['barcode']?.toString() ?? 'Not specified',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: isDarkMode ? Colors.white : Colors.black87,
-                          ),
-                        ),
-                      ],
+                      );
+                    } else if (value == 'delete') {
+                      _deleteEquipment(equipment['_id']);
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => [
+                    PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('Edit'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'view',
+                      child: Row(
+                        children: [
+                          Icon(Icons.visibility, color: Colors.blue),
+                          SizedBox(width: 8),
+                          Text('View Details'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text('Delete'),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-            ],
-          ),
+              ],
+            ),
+            Divider(color: Colors.grey[400], height: 20),
+            Row(
+              children: [
+                Text(
+                  'Serial Number: ',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  equipment['serialNumber']?.toString() ?? 'Not specified',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 8),
+            Row(
+              children: [
+                Text(
+                  'Type: ',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                ),
+                Text(
+                  typeName,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDarkMode ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+            if (equipment['barcode']?.toString().isNotEmpty ?? false)
+              Column(
+                children: [
+                  SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Text(
+                        'Barcode: ',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          color:
+                              isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                        ),
+                      ),
+                      Text(
+                        equipment['barcode']?.toString() ?? 'Not specified',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: isDarkMode ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+          ],
         ),
       ),
     );
@@ -584,7 +714,7 @@ class _MyEquipmentPageState extends State<MyEquipmentPage> {
           ),
         ),
       ),
-      bottomNavigationBar: NavbarClient(
+      bottomNavigationBar: NavbarTechnician(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
       ),

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:helpdeskfrontend/services/typeEquip_service.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 
 class EditTypeEquipmentPage extends StatefulWidget {
   final String id;
@@ -37,18 +38,14 @@ class _EditTypeEquipmentPageState extends State<EditTypeEquipmentPage> {
     super.initState();
     _typeNameController.text = widget.initialTypeName;
     _typeEquipController.text = widget.initialTypeEquip;
-    print('Initial Logo Path: ${widget.initialLogoPath}');
   }
 
   Future<void> _pickImage() async {
     final pickedFile =
         await ImagePicker().pickImage(source: ImageSource.gallery);
-
     setState(() {
       if (pickedFile != null) {
         _logoFile = File(pickedFile.path);
-      } else {
-        print('No image selected.');
       }
     });
   }
@@ -89,47 +86,75 @@ class _EditTypeEquipmentPageState extends State<EditTypeEquipmentPage> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final backgroundColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF242E3E)
-        : Colors.white;
-    final textColor =
-        themeProvider.themeMode == ThemeMode.dark ? Colors.white : Colors.black;
-    final hintColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF858397)
-        : Colors.black54;
-    final textFieldBackgroundColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF2A3447)
-        : const Color(0xFFF5F5F5);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+    final backgroundColor = isDarkMode ? const Color(0xFF242E3E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final hintColor = isDarkMode ? const Color(0xFF858397) : Colors.black54;
+    final textFieldBackgroundColor =
+        isDarkMode ? const Color(0xFF2A3447) : const Color(0xFFF5F5F5);
 
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         title: Text(
           'Modifier le type d\'équipement',
           style: GoogleFonts.poppins(
-            color: textColor,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.save, color: textColor),
-            onPressed: _isLoading ? null : _updateTypeEquipment,
-          ),
+        backgroundColor: isDarkMode ? Colors.black : Color(0xFF628ff6),
+        iconTheme: IconThemeData(color: Colors.white),
+        actions: const [
+          ThemeToggleButton(),
+          SizedBox(width: 10),
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(30, 30, 30, 40),
+              padding: const EdgeInsets.all(20),
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Image Section at the top
+                    GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        width: 100,
+                        height: 100,
+                        margin: const EdgeInsets.only(bottom: 30),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color:
+                              isDarkMode ? Colors.grey[800] : Colors.grey[200],
+                        ),
+                        child: _logoFile != null
+                            ? ClipOval(
+                                child: Image.file(
+                                  _logoFile!,
+                                  fit: BoxFit.cover,
+                                ),
+                              )
+                            : (widget.initialLogoPath != null
+                                ? ClipOval(
+                                    child: Image.network(
+                                      widget.initialLogoPath!,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  )
+                                : Center(
+                                    child: Icon(
+                                      Icons.add_a_photo,
+                                      size: 40,
+                                      color: textColor,
+                                    ),
+                                  )),
+                      ),
+                    ),
+
+                    // Form Fields
                     _buildTextField(
                       label: 'Nom du type*',
                       controller: _typeNameController,
@@ -144,7 +169,7 @@ class _EditTypeEquipmentPageState extends State<EditTypeEquipmentPage> {
                       backgroundColor: textFieldBackgroundColor,
                       icon: Icons.category,
                     ),
-                    const SizedBox(height: 15),
+                    const SizedBox(height: 20),
                     _buildTextField(
                       label: 'Type d\'équipement*',
                       controller: _typeEquipController,
@@ -160,71 +185,24 @@ class _EditTypeEquipmentPageState extends State<EditTypeEquipmentPage> {
                       icon: Icons.devices,
                     ),
                     const SizedBox(height: 30),
-                    Center(
-                      child: GestureDetector(
-                        onTap: _pickImage,
-                        child: Stack(
-                          alignment: Alignment.bottomRight,
-                          children: [
-                            CircleAvatar(
-                              radius: 50,
-                              backgroundColor: Colors.grey[300],
-                              backgroundImage: _logoFile != null
-                                  ? FileImage(_logoFile!)
-                                  : (widget.initialLogoPath != null
-                                      ? NetworkImage(widget.initialLogoPath!)
-                                      : null),
-                              child: _logoFile == null &&
-                                      widget.initialLogoPath == null
-                                  ? Icon(
-                                      Icons.add_a_photo,
-                                      size: 40,
-                                      color: textColor,
-                                    )
-                                  : null,
-                            ),
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.blue,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.add,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 30),
-                    Center(
+
+                    // Update Button
+                    SizedBox(
+                      width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _updateTypeEquipment,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 40,
-                            vertical: 15,
-                          ),
+                          backgroundColor:
+                              isDarkMode ? Colors.blue.shade800 : Colors.blue,
+                          padding: const EdgeInsets.symmetric(vertical: 15),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
+                            borderRadius: BorderRadius.circular(10),
                           ),
                         ),
                         child: _isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
                               )
                             : Text(
                                 'Enregistrer',
@@ -246,13 +224,11 @@ class _EditTypeEquipmentPageState extends State<EditTypeEquipmentPage> {
   Widget _buildTextField({
     required String label,
     required TextEditingController controller,
-    bool obscureText = false,
     String? Function(String?)? validator,
     required Color hintColor,
     required Color textColor,
-    Widget? suffixIcon,
-    Color? backgroundColor,
-    IconData? icon,
+    required Color backgroundColor,
+    required IconData icon,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,32 +238,28 @@ class _EditTypeEquipmentPageState extends State<EditTypeEquipmentPage> {
           style: GoogleFonts.poppins(
             color: hintColor,
             fontSize: 14,
-            fontWeight: FontWeight.w400,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
             color: backgroundColor,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: TextFormField(
             controller: controller,
-            obscureText: obscureText,
             style: GoogleFonts.poppins(
               color: textColor,
               fontSize: 14,
-              fontWeight: FontWeight.w400,
             ),
             decoration: InputDecoration(
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 12,
+                vertical: 14,
               ),
               border: InputBorder.none,
-              filled: false,
-              prefixIcon: icon != null ? Icon(icon, color: hintColor) : null,
-              suffixIcon: suffixIcon,
+              prefixIcon: Icon(icon, color: hintColor),
             ),
             validator: validator,
           ),

@@ -2,10 +2,12 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:helpdeskfrontend/models/technicien.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 
 class TechnicienService {
-  static const String baseUrl = 'http://192.168.1.16:3000/tech';
+  static const String baseUrl = Config.baseUrl +
+      '/tech'; // Use baseUrl from Config class with '/tech' suffix
 
   static Future<List<Technicien>> getTechnicians() async {
     final token = await AuthService().getToken();

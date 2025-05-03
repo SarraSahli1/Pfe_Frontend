@@ -7,6 +7,7 @@ import 'package:http_parser/http_parser.dart';
 import 'package:helpdeskfrontend/services/user_service.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 
 class EditUserScreen extends StatefulWidget {
   final String userId;
@@ -31,6 +32,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
   late TextEditingController _signatureController;
   late TextEditingController _companyController;
   late TextEditingController _aboutController;
+  late TextEditingController _birthDateController;
 
   bool _valid = true;
   File? _imageFile;
@@ -70,6 +72,14 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _aboutController = TextEditingController(
       text: widget.userData['about']?.toString() ?? '',
     );
+    _birthDateController = TextEditingController(
+      text: widget.userData['birthDate'] != null
+          ? DateTime.parse(widget.userData['birthDate'].toString())
+              .toLocal()
+              .toString()
+              .split(' ')[0]
+          : '',
+    );
 
     if (widget.userData['authority'] == 'technician') {
       _birthDate = widget.userData['birthDate'] != null
@@ -90,6 +100,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
     _signatureController.dispose();
     _companyController.dispose();
     _aboutController.dispose();
+    _birthDateController.dispose();
     super.dispose();
   }
 
@@ -111,6 +122,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
     if (pickedFile != null) {
       setState(() {
         _signatureFile = File(pickedFile.path);
+        _signatureController.text = pickedFile.path.split('/').last;
       });
     }
   }
@@ -125,6 +137,7 @@ class _EditUserScreenState extends State<EditUserScreen> {
     if (picked != null) {
       setState(() {
         _birthDate = picked;
+        _birthDateController.text = picked.toLocal().toString().split(' ')[0];
       });
     }
   }
@@ -213,17 +226,12 @@ class _EditUserScreenState extends State<EditUserScreen> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final backgroundColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF242E3E)
-        : Colors.white;
-    final textColor =
-        themeProvider.themeMode == ThemeMode.dark ? Colors.white : Colors.black;
-    final hintColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF858397)
-        : Colors.black54;
-    final textFieldBackgroundColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF2A3447)
-        : const Color(0xFFF5F5F5);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+    final backgroundColor = isDarkMode ? const Color(0xFF242E3E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final hintColor = isDarkMode ? const Color(0xFF858397) : Colors.black54;
+    final textFieldBackgroundColor =
+        isDarkMode ? const Color(0xFF2A3447) : const Color(0xFFF5F5F5);
 
     final imagePath = widget.userData['image'] != null
         ? widget.userData['image']['path']
@@ -232,19 +240,25 @@ class _EditUserScreenState extends State<EditUserScreen> {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: isDarkMode
+            ? Colors.black
+            : const Color.fromRGBO(133, 171, 250, 1.0), // Match AdminUsersList
+        elevation: 0, // Match AdminUsersList
         title: Text(
           'Edit User',
           style: GoogleFonts.poppins(
-            color: textColor,
+            color: Colors.white, // Match AdminUsersList, simplified
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
         ),
+        iconTheme:
+            const IconThemeData(color: Colors.white), // Match AdminUsersList
         actions: [
+          const ThemeToggleButton(),
           IconButton(
-            icon: Icon(Icons.save, color: textColor),
+            icon: const Icon(Icons.save,
+                color: Colors.white), // Match AdminUsersList
             onPressed: _submitForm,
           ),
         ],
@@ -369,18 +383,14 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   icon: Icons.email,
                 ),
                 const SizedBox(height: 15),
-                ListTile(
-                  title: Text(
-                    _birthDate == null
-                        ? 'Select Birth Date'
-                        : 'Birth Date: ${_birthDate!.toLocal().toString().split(' ')[0]}',
-                    style: GoogleFonts.poppins(
-                      color: textColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                  trailing: Icon(Icons.calendar_today, color: hintColor),
+                _buildTextField(
+                  label: 'Date de Naissance',
+                  controller: _birthDateController,
+                  hintColor: hintColor,
+                  textColor: textColor,
+                  backgroundColor: textFieldBackgroundColor,
+                  icon: Icons.calendar_today,
+                  readOnly: true,
                   onTap: () => _selectDate(context),
                 ),
                 const SizedBox(height: 15),
@@ -391,51 +401,44 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   textColor: textColor,
                   backgroundColor: textFieldBackgroundColor,
                   icon: Icons.edit,
-                ),
-                const SizedBox(height: 15),
-                ElevatedButton(
-                  onPressed: _pickSignature,
-                  child: Text(
-                    'Pick Signature',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  readOnly: true,
+                  suffixIcon: IconButton(
+                    icon: Icon(Icons.attach_file, color: hintColor),
+                    onPressed: _pickSignature,
                   ),
                 ),
                 const SizedBox(height: 15),
                 if (_signatureFile != null)
-                  Image.file(
-                    _signatureFile!,
-                    height: 100,
-                    width: 100,
+                  Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Image.file(
+                      _signatureFile!,
+                      height: 100,
+                      width: 100,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 const SizedBox(height: 15),
-                SwitchListTile(
-                  title: Text(
-                    'Has Passport',
-                    style: GoogleFonts.poppins(
-                      color: textColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
+                _buildSwitchField(
+                  label: 'Has Passport',
                   value: _hasPassport,
                   onChanged: (value) => setState(() => _hasPassport = value),
+                  hintColor: hintColor,
+                  textColor: textColor,
+                  backgroundColor: textFieldBackgroundColor,
                 ),
-                SwitchListTile(
-                  title: Text(
-                    'Has Driver License',
-                    style: GoogleFonts.poppins(
-                      color: textColor,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
+                const SizedBox(height: 15),
+                _buildSwitchField(
+                  label: 'Has Driver License',
                   value: _hasDriverLicense,
                   onChanged: (value) =>
                       setState(() => _hasDriverLicense = value),
+                  hintColor: hintColor,
+                  textColor: textColor,
+                  backgroundColor: textFieldBackgroundColor,
                 ),
               ],
               if (widget.userData['authority'] == 'client') ...[
@@ -457,30 +460,6 @@ class _EditUserScreenState extends State<EditUserScreen> {
                   icon: Icons.info,
                 ),
               ],
-              const SizedBox(height: 20),
-              Center(
-                child: ElevatedButton(
-                  onPressed: _submitForm,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 40,
-                      vertical: 15,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: Text(
-                    'Save',
-                    style: GoogleFonts.poppins(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -498,6 +477,8 @@ class _EditUserScreenState extends State<EditUserScreen> {
     Widget? suffixIcon,
     Color? backgroundColor,
     IconData? icon,
+    bool readOnly = false,
+    VoidCallback? onTap,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -535,6 +516,54 @@ class _EditUserScreenState extends State<EditUserScreen> {
               suffixIcon: suffixIcon,
             ),
             validator: validator,
+            readOnly: readOnly,
+            onTap: onTap,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSwitchField({
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    required Color hintColor,
+    required Color textColor,
+    required Color backgroundColor,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            color: hintColor,
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            title: Text(
+              value ? 'Yes' : 'No',
+              style: GoogleFonts.poppins(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            value: value,
+            onChanged: onChanged,
+            activeColor: Colors.blue,
+            inactiveThumbColor: Colors.grey,
+            inactiveTrackColor: Colors.grey[300],
           ),
         ),
       ],

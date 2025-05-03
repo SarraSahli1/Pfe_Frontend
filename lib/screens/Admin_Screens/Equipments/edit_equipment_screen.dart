@@ -4,6 +4,7 @@ import 'package:helpdeskfrontend/services/equipement_service.dart';
 import 'package:helpdeskfrontend/services/typeEquip_service.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 
 class EditEquipmentPage extends StatefulWidget {
   final String id;
@@ -84,9 +85,7 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content:
-                Text('Erreur lors du chargement des types d\'équipement : $e')),
+        SnackBar(content: Text('Error loading equipment types: $e')),
       );
     }
   }
@@ -133,7 +132,7 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
         Navigator.pop(context, true);
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la mise à jour : $e')),
+          SnackBar(content: Text('Error updating equipment: $e')),
         );
       } finally {
         setState(() {
@@ -155,36 +154,28 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final backgroundColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF242E3E)
-        : Colors.white;
-    final textColor =
-        themeProvider.themeMode == ThemeMode.dark ? Colors.white : Colors.black;
-    final hintColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF858397)
-        : Colors.black54;
-    final textFieldBackgroundColor = themeProvider.themeMode == ThemeMode.dark
-        ? const Color(0xFF2A3447)
-        : const Color(0xFFF5F5F5);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+    final backgroundColor = isDarkMode ? const Color(0xFF242E3E) : Colors.white;
+    final textColor = isDarkMode ? Colors.white : Colors.black;
+    final hintColor = isDarkMode ? const Color(0xFF858397) : Colors.black54;
+    final textFieldBackgroundColor =
+        isDarkMode ? const Color(0xFF2A3447) : const Color(0xFFF5F5F5);
 
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
         title: Text(
-          'Modifier l\'équipement',
+          'Edit Equipment',
           style: GoogleFonts.poppins(
-            color: textColor,
+            color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w700,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.save, color: textColor),
-            onPressed: _isLoading ? null : _updateEquipment,
-          ),
+        backgroundColor: isDarkMode ? Colors.black : Color(0xFF628ff6),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [
+          ThemeToggleButton(),
         ],
       ),
       body: _isLoading
@@ -197,7 +188,7 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildTextField(
-                      label: 'Numéro de série',
+                      label: 'Serial Number',
                       controller: _serialNumberController,
                       hintColor: hintColor,
                       textColor: textColor,
@@ -206,11 +197,11 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
                     ),
                     const SizedBox(height: 15),
                     _buildTextField(
-                      label: 'Désignation*',
+                      label: 'Designation*',
                       controller: _designationController,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Ce champ est obligatoire';
+                          return 'This field is required';
                         }
                         return null;
                       },
@@ -230,7 +221,7 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
                     ),
                     const SizedBox(height: 15),
                     _buildTextField(
-                      label: 'Code-barres',
+                      label: 'Barcode',
                       controller: _barcodeController,
                       hintColor: hintColor,
                       textColor: textColor,
@@ -238,43 +229,90 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
                       icon: Icons.qr_code,
                     ),
                     const SizedBox(height: 15),
-                    ListTile(
-                      title: Text(
-                        _inventoryDate == null
-                            ? 'Sélectionner une date d\'inventaire'
-                            : 'Date: ${_inventoryDate!.toLocal().toString().split(' ')[0]}',
-                        style: GoogleFonts.poppins(
-                          color: textColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
+                    // Updated Date Field with same background
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Inventory Date',
+                          style: GoogleFonts.poppins(
+                            color: hintColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                          ),
                         ),
-                      ),
-                      trailing: Icon(Icons.calendar_today, color: hintColor),
-                      onTap: () => _selectDate(context),
+                        const SizedBox(height: 4),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: textFieldBackgroundColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ListTile(
+                            title: Text(
+                              _inventoryDate == null
+                                  ? 'Select inventory date'
+                                  : 'Date: ${_inventoryDate!.toLocal().toString().split(' ')[0]}',
+                              style: GoogleFonts.poppins(
+                                color: textColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            trailing:
+                                Icon(Icons.calendar_today, color: hintColor),
+                            onTap: () => _selectDate(context),
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 15),
-                    SwitchListTile(
-                      title: Text(
-                        'Assigné',
-                        style: GoogleFonts.poppins(
-                          color: textColor,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
+                    // Updated Assigned Field with same background
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Assigned',
+                          style: GoogleFonts.poppins(
+                            color: hintColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                          ),
                         ),
-                      ),
-                      value: _assigned,
-                      onChanged: (bool value) {
-                        setState(() {
-                          _assigned = value;
-                        });
-                      },
+                        const SizedBox(height: 4),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: textFieldBackgroundColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: SwitchListTile(
+                            title: Text(
+                              _assigned ? 'Yes' : 'No',
+                              style: GoogleFonts.poppins(
+                                color: textColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                            value: _assigned,
+                            onChanged: (bool value) {
+                              setState(() {
+                                _assigned = value;
+                              });
+                            },
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 15),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Type d\'équipement*',
+                          'Equipment Type*',
                           style: GoogleFonts.poppins(
                             color: hintColor,
                             fontSize: 14,
@@ -318,7 +356,7 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
                             },
                             validator: (value) {
                               if (value == null) {
-                                return 'Veuillez sélectionner un type';
+                                return 'Please select a type';
                               }
                               return null;
                             },
@@ -336,7 +374,7 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _updateEquipment,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue,
+                          backgroundColor: Color(0xFF628ff6),
                           padding: const EdgeInsets.symmetric(
                             horizontal: 40,
                             vertical: 15,
@@ -355,7 +393,7 @@ class _EditEquipmentPageState extends State<EditEquipmentPage> {
                                 ),
                               )
                             : Text(
-                                'Enregistrer les modifications',
+                                'Save Changes',
                                 style: GoogleFonts.poppins(
                                   color: Colors.white,
                                   fontSize: 16,

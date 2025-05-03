@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helpdeskfrontend/screens/Client_Screens/Profile/profile.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Tickets/tickets_screen.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Equipments/my_equipments.dart';
 
@@ -26,8 +27,13 @@ class NavbarClient extends StatelessWidget {
           MaterialPageRoute(builder: (context) => MyEquipmentPage()),
         );
         break;
-      case 2: // Users (hhhzh)
-        return; // Do nothing as per your current implementation
+      case 2: // Profile
+        print('Navigating to profile');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => ProfilePage()),
+        );
+        break;
       case 3: // Tickets
         print('Navigating to tickets');
         Navigator.pushReplacement(
@@ -46,22 +52,20 @@ class NavbarClient extends StatelessWidget {
   Widget build(BuildContext context) {
     return BottomNavigationBar(
       currentIndex: currentIndex,
-      onTap: (index) {
-        _navigateToPage(context, index);
-      },
+      onTap: (index) => _navigateToPage(context, index),
       type: BottomNavigationBarType.fixed,
       items: const <BottomNavigationBarItem>[
         BottomNavigationBarItem(
           icon: Icon(Icons.home),
-          label: 'Home',
+          label: 'Accueil',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.computer),
-          label: 'Equipments',
+          label: 'Équipements',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.person),
-          label: 'hhhzh',
+          label: 'Profil',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.report_problem),

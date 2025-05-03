@@ -1,18 +1,16 @@
 // chat_service.dart
 import 'dart:io';
 import 'package:helpdeskfrontend/models/chat_message.dart';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'dart:convert';
 
 class ChatService {
-  final String baseUrl;
-
-  ChatService({required this.baseUrl});
-
+  // Remove the baseUrl parameter since we're using Config.baseUrl now
   Future<Chat> getChatForTicket(String ticketId, String token) async {
     final response = await http.get(
-      Uri.parse('$baseUrl/chat/getChatForTicket/$ticketId'),
+      Uri.parse('${Config.baseUrl}/chat/getChatForTicket/$ticketId'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -30,7 +28,7 @@ class ChatService {
     required String token,
     List<File>? files,
   }) async {
-    final uri = Uri.parse('$baseUrl/chat/sendMessageToChat/$ticketId');
+    final uri = Uri.parse('${Config.baseUrl}/chat/sendMessageToChat/$ticketId');
     var request = http.MultipartRequest('POST', uri);
 
     request.headers['Authorization'] = 'Bearer $token';

@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/models/user.dart';
+import 'package:helpdeskfrontend/services/auth_service.dart';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class UserService {
-  final String baseUrl = "http://192.168.1.16:3000";
+  final String baseUrl = Config.baseUrl; // Use baseUrl from Config class
 
   String getImageUrl(String fileId) {
     return '$baseUrl/files/$fileId';
@@ -222,6 +225,81 @@ class UserService {
       }
     } catch (e) {
       throw Exception('Erreur lors de la récupération des clients: $e');
+    }
+  }
+
+  Future<User> getProfile() async {
+    try {
+      final token = await AuthService().getToken();
+      debugPrint('Token for getProfile: $token');
+      if (token == null) {
+        throw Exception('No token found');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/user/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint('getProfile response status: ${response.statusCode}');
+      debugPrint('getProfile response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['data'] == null) {
+          throw Exception('No user data in response');
+        }
+        return User.fromMap(jsonResponse['data']);
+      } else {
+        throw Exception(
+            'Failed to load profile: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error in getProfile: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      final token = await AuthService().getToken();
+      if (token == null) {
+        throw Exception('No authentication token found');
+      }
+
+      // Decode the token to get user role
+      final decodedToken = JwtDecoder.decode(token);
+      final role = decodedToken['authority'] ?? 'user';
+
+      final response = await http.post(
+        Uri.parse('${Config.baseUrl}/user/changePassword/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+          'rolepassword': role,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return;
+      } else {
+        final errorData = jsonDecode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to change password');
+      }
+    } catch (e) {
+      debugPrint('Error changing password: $e');
+      rethrow;
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helpdeskfrontend/screens/Admin_Screens/Dashboard/admin_dashboard.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Users/admin_users_list.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Tickets/admin_tickets_list.dart'; // Ajoutez cette importation
 import 'package:helpdeskfrontend/widgets/equipement_bottom_sheet.dart';
@@ -18,7 +19,10 @@ class NavbarAdmin extends StatelessWidget {
     switch (index) {
       case 0: // Home
         print('Navigating to Home');
-        Navigator.pushReplacementNamed(context, '/home');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardAdmin()),
+        );
         break;
       case 1: // Users
         print('Navigating to Users');

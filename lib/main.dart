@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/screens/First_Screens/firstpage.dart';
-import 'provider/theme_provider.dart'; // Import your ThemeProvider
-import 'package:provider/provider.dart'; // Add this import
+import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/provider/notification_provider.dart';
+import 'package:helpdeskfrontend/screens/First_Screens/signin_screen.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   runApp(
-    // Use ChangeNotifierProvider.value or Provider
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+      ],
       child: const MyApp(),
     ),
   );
@@ -18,16 +22,35 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
+    // Use Builder to access providers below MaterialApp
+    return Builder(
+      builder: (context) {
+        final themeProvider = Provider.of<ThemeProvider>(context);
 
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Flutter Demo',
-      theme: ThemeData.light(), // Light theme
-      darkTheme: ThemeData.dark(), // Dark theme
-      themeMode:
-          themeProvider.themeMode, // Use the theme mode from the provider
-      home: const Firstpage(),
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'HelpDesk App',
+          theme: ThemeData.light().copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.blue,
+              secondary: Colors.blueAccent,
+            ),
+          ),
+          darkTheme: ThemeData.dark().copyWith(
+            colorScheme: ColorScheme.dark(
+              primary: Colors.blueGrey,
+              secondary: Colors.blueAccent,
+            ),
+          ),
+          themeMode: themeProvider.themeMode,
+          home: const Firstpage(),
+          // Add route management if needed
+          routes: {
+            '/firstpage': (context) => const Firstpage(),
+            '/login': (context) => const SignInScreen(), // Your login screen
+          },
+        );
+      },
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Equipments/create_equipement.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Equipments/edit_equipment_screen.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Equipments/equipment_details_page.dart';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:helpdeskfrontend/services/equipement_service.dart';
 import 'package:helpdeskfrontend/widgets/navbar_admin.dart';
 import 'package:provider/provider.dart';
@@ -148,31 +149,45 @@ class _EquipmentListPageState extends State<EquipmentListPage> {
     }).toList();
   }
 
+  String? _getFullImageUrl(String? path) {
+    if (path == null) return null;
+    if (path.startsWith('http')) return path;
+    return '${Config.baseUrl}/files/files/$path';
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
     final filteredEquipments = _filterEquipmentsBySearch();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Equipements'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add),
-            onPressed: () {
-              showCreateEquipmentModal(context).then((shouldRefresh) {
-                if (shouldRefresh == true) {
-                  _fetchEquipments();
-                }
-              });
-            },
-          ),
-          const ThemeToggleButton(),
+        title:
+            const Text('Equipment List', style: TextStyle(color: Colors.white)),
+        backgroundColor: isDarkMode ? Colors.black : Color(0xFF628ff6),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [
+          ThemeToggleButton(),
         ],
       ),
       backgroundColor: themeProvider.themeMode == ThemeMode.dark
           ? const Color(0xFF242E3E)
           : Colors.white,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          showCreateEquipmentModal(context).then((shouldRefresh) {
+            if (shouldRefresh == true) {
+              _fetchEquipments();
+            }
+          });
+        },
+        backgroundColor: isDarkMode ? Colors.black : Color(0xFF628ff6),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label:
+            const Text('Add Equipment', style: TextStyle(color: Colors.white)),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: RefreshIndicator(
         onRefresh: _fetchEquipments,
         child: _isLoading
@@ -231,6 +246,7 @@ class _EquipmentListPageState extends State<EquipmentListPage> {
                             return EquipmentCard(
                               serialNumber: equipment['serialNumber'],
                               designation: equipment['designation'],
+                              typeEquipment: equipment['TypeEquipment'],
                               themeProvider: themeProvider,
                               onEdit: () => _editEquipment(
                                 equipment['_id'],
@@ -398,13 +414,7 @@ class _AutocompleteSearchInputState extends State<AutocompleteSearchInput> {
               itemBuilder: (context, index) {
                 final equipment = _suggestions[index];
                 return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: const Color(0xFFffede6),
-                    child: Icon(
-                      Icons.build,
-                      color: const Color(0xFFfda781),
-                    ),
-                  ),
+                  leading: _buildTypeImage(equipment['TypeEquipment']),
                   title: Text(
                     equipment['serialNumber'],
                     style: TextStyle(
@@ -429,6 +439,32 @@ class _AutocompleteSearchInputState extends State<AutocompleteSearchInput> {
     );
   }
 
+  Widget _buildTypeImage(dynamic typeEquipment) {
+    final themeProvider = Provider.of<ThemeProvider>(context, listen: false);
+    String? imageUrl;
+
+    if (typeEquipment != null && typeEquipment is Map<String, dynamic>) {
+      if (typeEquipment['logo'] != null &&
+          typeEquipment['logo']['path'] != null) {
+        imageUrl = typeEquipment['logo']['path'];
+        if (!imageUrl!.startsWith('http')) {
+          imageUrl = '${Config.baseUrl}/files/files/$imageUrl';
+        }
+      }
+    }
+
+    return CircleAvatar(
+      backgroundColor: const Color(0xFFffede6),
+      backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+      child: imageUrl == null
+          ? Icon(
+              Icons.build,
+              color: const Color(0xFFfda781),
+            )
+          : null,
+    );
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -440,6 +476,7 @@ class _AutocompleteSearchInputState extends State<AutocompleteSearchInput> {
 class EquipmentCard extends StatelessWidget {
   final String serialNumber;
   final String designation;
+  final dynamic typeEquipment;
   final ThemeProvider themeProvider;
   final Function onEdit;
   final Function onDelete;
@@ -449,14 +486,36 @@ class EquipmentCard extends StatelessWidget {
     Key? key,
     required this.serialNumber,
     required this.designation,
+    required this.typeEquipment,
     required this.themeProvider,
     required this.onEdit,
     required this.onDelete,
     required this.onViewDetails,
   }) : super(key: key);
 
+  String? _getTypeImageUrl() {
+    if (typeEquipment == null) return null;
+
+    if (typeEquipment is Map<String, dynamic>) {
+      if (typeEquipment['logo'] != null &&
+          typeEquipment['logo']['path'] != null) {
+        final path = typeEquipment['logo']['path'];
+        if (path.startsWith('http')) {
+          return path;
+        }
+        return '${Config.baseUrl}/files/files/$path';
+      }
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final typeImageUrl = _getTypeImageUrl();
+    final typeName = typeEquipment is Map<String, dynamic>
+        ? typeEquipment['typeName'] ?? 'N/A'
+        : 'N/A';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -472,11 +531,15 @@ class EquipmentCard extends StatelessWidget {
           CircleAvatar(
             radius: 30,
             backgroundColor: const Color(0xFFffede6),
-            child: Icon(
-              Icons.build,
-              size: 30,
-              color: const Color(0xFFfda781),
-            ),
+            backgroundImage:
+                typeImageUrl != null ? NetworkImage(typeImageUrl) : null,
+            child: typeImageUrl == null
+                ? Icon(
+                    Icons.build,
+                    size: 30,
+                    color: const Color(0xFFfda781),
+                  )
+                : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -496,6 +559,17 @@ class EquipmentCard extends StatelessWidget {
                 ),
                 Text(
                   'Désignation: $designation',
+                  style: TextStyle(
+                    color: themeProvider.themeMode == ThemeMode.dark
+                        ? const Color(0xFFB8B8D2)
+                        : Colors.grey[700],
+                    fontSize: 12,
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+                Text(
+                  'Type: $typeName',
                   style: TextStyle(
                     color: themeProvider.themeMode == ThemeMode.dark
                         ? const Color(0xFFB8B8D2)

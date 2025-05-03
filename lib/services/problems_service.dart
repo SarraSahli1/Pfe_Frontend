@@ -1,9 +1,9 @@
 import 'dart:convert';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 
 class ProblemsService {
-  final String baseUrl =
-      "http://192.168.1.16:3000"; // Replace with your API URL
+  final String baseUrl = Config.baseUrl; // Use baseUrl from Config class
 
   // Create a new problem
   Future<Map<String, dynamic>> createProblem({

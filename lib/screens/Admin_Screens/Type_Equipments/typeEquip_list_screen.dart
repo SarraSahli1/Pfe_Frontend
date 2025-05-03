@@ -122,33 +122,55 @@ class _TypeEquipmentListPageState extends State<TypeEquipmentListPage> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
     final filteredTypeEquipments = _filterTypeEquipments();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Equipment Types'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => CreateTypeEquipmentPage(),
-                ),
-              ).then((shouldRefresh) {
-                if (shouldRefresh == true) {
-                  _fetchTypeEquipments();
-                }
-              });
-            },
-          ),
-          const ThemeToggleButton(),
+        title: const Text('Equipment Types',
+            style: TextStyle(color: Colors.white)),
+        backgroundColor: isDarkMode ? Colors.black : Color(0xFF628ff6),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [
+          ThemeToggleButton(),
         ],
       ),
       backgroundColor: themeProvider.themeMode == ThemeMode.dark
           ? const Color(0xFF242E3E)
           : Colors.white,
+      floatingActionButton: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CreateTypeEquipmentPage(),
+              ),
+            ).then((shouldRefresh) {
+              if (shouldRefresh == true) {
+                _fetchTypeEquipments();
+              }
+            });
+          },
+          backgroundColor: isDarkMode ? Colors.black : Color(0xFF628ff6),
+          icon: const Icon(Icons.add, color: Colors.white, size: 24),
+          label: const Text(
+            'Add Type',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              fontFamily: 'Poppins',
+            ),
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+          elevation: 4,
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       body: RefreshIndicator(
         onRefresh: _fetchTypeEquipments,
         color: Colors.orange,
@@ -246,6 +268,7 @@ class _TypeEquipmentListPageState extends State<TypeEquipmentListPage> {
     );
   }
 
+  // [Rest of the code remains unchanged...]
   Widget _buildSearchBar(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
@@ -295,7 +318,7 @@ class _TypeEquipmentListPageState extends State<TypeEquipmentListPage> {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.end, // This forces right alignment
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
           _buildFilterChip('All', 'all', isDarkMode),
           _buildFilterChip('Hard', 'hard', isDarkMode),
@@ -312,18 +335,17 @@ class _TypeEquipmentListPageState extends State<TypeEquipmentListPage> {
       onTap: () => setState(() => _selectedFilter = value),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        margin: const EdgeInsets.only(
-            left: 8), // Changed to left margin for right-aligned chips
+        margin: const EdgeInsets.only(left: 8),
         decoration: BoxDecoration(
           color: isSelected ? Colors.blue.shade600 : Colors.transparent,
-          borderRadius: BorderRadius.circular(24), // Slightly more rounded
+          borderRadius: BorderRadius.circular(24),
           border: Border.all(
             color: isSelected
                 ? Colors.blue.shade600
                 : isDarkMode
                     ? Colors.grey.shade600
                     : Colors.grey.shade400,
-            width: isSelected ? 0 : 1.5, // Thicker border when not selected
+            width: isSelected ? 0 : 1.5,
           ),
           boxShadow: isSelected
               ? [

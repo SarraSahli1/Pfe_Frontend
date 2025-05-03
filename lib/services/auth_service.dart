@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
@@ -6,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:jwt_decoder/jwt_decoder.dart';
 
 class AuthService {
-  final String baseUrl = "http://192.168.1.16:3000";
   static const String _tokenKey = 'user_token';
   static const String _userIdKey = 'user_id';
   static const String _userDataKey = 'user_data';
@@ -28,7 +28,7 @@ class AuthService {
     String? about,
     String? company,
   }) async {
-    final Uri url = Uri.parse('$baseUrl/auth/register');
+    final Uri url = Uri.parse('${Config.baseUrl}/auth/register');
     var request = http.MultipartRequest('POST', url)
       ..fields['firstName'] = firstName
       ..fields['lastName'] = lastName
@@ -84,7 +84,7 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final Uri url = Uri.parse('$baseUrl/auth/login');
+    final Uri url = Uri.parse('${Config.baseUrl}/auth/login');
 
     try {
       final response = await http.post(
@@ -179,5 +179,65 @@ class AuthService {
     }
 
     return null;
+  }
+
+  Future<Map<String, dynamic>> forgotPassword({required String email}) async {
+    final Uri url = Uri.parse('${Config.baseUrl}/auth/forgot-password');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': email}),
+      );
+
+      if (response.statusCode == 200) {
+        return {
+          "success": true,
+          "message": "Email de réinitialisation envoyé avec succès",
+        };
+      } else {
+        final responseData = jsonDecode(response.body);
+        return {
+          "success": false,
+          "message": responseData['message'] ?? "Échec de la demande",
+        };
+      }
+    } catch (e) {
+      return {"success": false, "message": "Une erreur est survenue: $e"};
+    }
+  }
+
+  Future<Map<String, dynamic>> resetPassword({
+    required String token,
+    required String newPassword,
+  }) async {
+    final Uri url = Uri.parse('${Config.baseUrl}/auth/reset-password');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'token': token,
+          'newPassword': newPassword,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return {
+          "success": true,
+          "message": "Mot de passe réinitialisé avec succès",
+        };
+      } else {
+        final responseData = jsonDecode(response.body);
+        return {
+          "success": false,
+          "message": responseData['message'] ?? "Échec de la réinitialisation",
+        };
+      }
+    } catch (e) {
+      return {"success": false, "message": "Une erreur est survenue: $e"};
+    }
   }
 }

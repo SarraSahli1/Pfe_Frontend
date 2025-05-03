@@ -2,12 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:helpdeskfrontend/models/ticket.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class TicketService {
-  static const String _baseUrl = 'http://192.168.1.16:3000/ticket';
+  static const String _baseUrl =
+      '${Config.baseUrl}/ticket'; // Use baseUrl from Config class with '/ticket' suffix
 
   // Créer un nouveau ticket
   static Future<Map<String, dynamic>> createTicket({
@@ -15,6 +17,7 @@ class TicketService {
     required String description,
     required String typeTicket,
     String? equipmentId,
+    String? problem, // Nouveau paramètre
     List<String>? filePaths,
   }) async {
     try {
@@ -26,31 +29,33 @@ class TicketService {
         Uri.parse('$_baseUrl/createTicket'),
       );
 
-      // Add headers
+      // Headers et champs
       request.headers.addAll({
         'Authorization': 'Bearer $token',
         'Accept': 'application/json',
       });
 
-      // Add text fields
       request.fields['title'] = title;
       request.fields['description'] = description;
       request.fields['typeTicket'] = typeTicket;
 
-      // Add equipmentId if provided
-      if (equipmentId != null && equipmentId.isNotEmpty) {
+      if (equipmentId != null) {
         request.fields['equipmentId'] = equipmentId;
       }
 
-      // Add files if provided
-      if (filePaths != null && filePaths.isNotEmpty) {
+      if (problem != null) {
+        request.fields['problem'] = problem; // Ajout du problème
+      }
+
+      // Ajout des fichiers
+      if (filePaths != null) {
         for (var filePath in filePaths) {
           var file = File(filePath);
           var stream = http.ByteStream(file.openRead());
           var length = await file.length();
 
           request.files.add(http.MultipartFile(
-            'files', // This must match what your backend expects
+            'files',
             stream,
             length,
             filename: filePath.split('/').last,
@@ -58,20 +63,54 @@ class TicketService {
         }
       }
 
-      // Debug print the request
-      debugPrint('Sending request with fields: ${request.fields}');
-
       final response = await request.send();
       final responseString = await response.stream.bytesToString();
 
       if (response.statusCode != 201) {
-        throw Exception(
-            'Failed to create ticket (${response.statusCode}): $responseString');
+        throw Exception('Failed to create ticket: $responseString');
       }
 
       return json.decode(responseString);
     } catch (e) {
       debugPrint('Error in createTicket: $e');
+      rethrow;
+    }
+  }
+
+  // Add solution to an existing ticket
+  static Future<Map<String, dynamic>> addSolutionToTicket({
+    required String ticketId,
+    required String solutionText,
+  }) async {
+    try {
+      final token = await AuthService().getToken();
+      if (token == null) throw Exception('User not authenticated');
+
+      final response = await http.post(
+        Uri.parse('$_baseUrl/$ticketId/solution'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'solutionText': solutionText,
+        }),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 201) {
+        return {
+          'success': true,
+          'solution': responseData['solution'],
+          'ticket': responseData['ticket'],
+        };
+      } else {
+        throw Exception(
+            'Failed to add solution (${response.statusCode}): ${responseData['message']}');
+      }
+    } catch (e) {
+      debugPrint('Error in addSolutionToTicket: $e');
       rethrow;
     }
   }
@@ -149,7 +188,7 @@ class TicketService {
     }
   }
 
-// Add this method to your TicketService class
+  // Add this method to your TicketService class
   static Future<List<Ticket>> getTicketsByClient() async {
     // Get token from AuthService
     final token = await AuthService().getToken();
@@ -326,6 +365,131 @@ class TicketService {
       }
     } catch (e) {
       debugPrint('Error in assignTechnicianToTicket: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> saveSolution({
+    required String ticketId,
+    required String solutionContent,
+    required String token,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/saveSolution'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'ticketId': ticketId,
+          'solution': solutionContent,
+        }),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return responseData;
+      } else {
+        throw Exception('Failed to save solution: ${responseData['message']}');
+      }
+    } catch (e) {
+      debugPrint('Error in saveSolution: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> getSolutionDetails({
+    required String solutionId,
+    required String token,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/solution/$solutionId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      final responseData = jsonDecode(response.body);
+      if (response.statusCode == 200 && responseData['err'] == false) {
+        return responseData['data'];
+      } else {
+        throw Exception(
+            'Failed to load solution details: ${responseData['message']}');
+      }
+    } catch (e) {
+      debugPrint('Error in getSolutionDetails: $e');
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> validateSolution({
+    required String ticketId,
+    required String token,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/validateSolution'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'ticketId': ticketId,
+        }),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        if (responseData['err'] == false) {
+          return {
+            'success': true,
+            'solution': responseData['rows'],
+            'message':
+                responseData['message'] ?? 'Solution validated successfully',
+          };
+        } else {
+          throw Exception(
+              responseData['message'] ?? 'Failed to validate solution');
+        }
+      } else {
+        throw Exception(
+          'Server error (${response.statusCode}): ${responseData['message'] ?? 'Unknown error'}',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error in validateSolution: $e');
+      rethrow;
+    }
+  }
+
+  static Future<List<dynamic>> getAllSolutions() async {
+    try {
+      final token = await AuthService().getToken();
+      if (token == null) throw Exception('User not authenticated');
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/knowledge-base'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && responseData['err'] == false) {
+        return responseData['data']; // List of solutions
+      } else {
+        throw Exception(
+            'Failed to load solutions: ${responseData['message'] ?? response.body}');
+      }
+    } catch (e) {
+      debugPrint('Error in getAllSolutions: $e');
       rethrow;
     }
   }

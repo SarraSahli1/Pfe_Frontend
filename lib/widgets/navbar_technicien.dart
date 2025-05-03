@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:helpdeskfrontend/screens/Client_Screens/Profile/profile.dart';
+import 'package:helpdeskfrontend/screens/Technicien_Screens/Solutions/solutions_list.dart';
 import 'package:helpdeskfrontend/screens/Technicien_Screens/tickets_screen.dart';
+import 'package:helpdeskfrontend/screens/Technicien_Screens/equipments/myequipments.dart';
 
 class NavbarTechnician extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
+
   const NavbarTechnician({
     Key? key,
     required this.currentIndex,
@@ -26,13 +30,32 @@ class NavbarTechnician extends StatelessWidget {
           ),
         );
         break;
-      case 2: // Schedule
-        print('Navigating to Schedule');
-        Navigator.pushReplacementNamed(context, '/technician-schedule');
+      case 2: // Solutions (Knowledge Base)
+        print('Navigating to Solutions');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const SolutionsListPage(),
+          ),
+        );
         break;
-      case 3: // Profile
-        print('Navigating to Technician Profile');
-        Navigator.pushReplacementNamed(context, '/technician-profile');
+      case 3: // Equipment
+        print('Navigating to My Equipments');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MyEquipmentPage(), // Your equipment page
+          ),
+        );
+        break;
+      case 4: // Profile
+        print('Navigating to Profile');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const ProfilePage(),
+          ),
+        );
         break;
       default:
         print('Unknown index: $index');
@@ -59,8 +82,12 @@ class NavbarTechnician extends StatelessWidget {
           label: 'Tickets',
         ),
         BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_today),
-          label: 'Schedule',
+          icon: Icon(Icons.book),
+          label: 'Solutions',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.computer),
+          label: 'Equipment',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.person),

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:helpdeskfrontend/services/equipement_service.dart';
-import 'package:helpdeskfrontend/services/user_service.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 
 class EquipmentDetailsPage extends StatefulWidget {
   final String equipmentId;
@@ -15,15 +18,12 @@ class EquipmentDetailsPage extends StatefulWidget {
 
 class _EquipmentDetailsPageState extends State<EquipmentDetailsPage> {
   final EquipmentService _equipmentService = EquipmentService();
-  final UserService _userService = UserService();
   late Future<Map<String, dynamic>> _futureEquipment;
-  late Future<List<dynamic>> _futureUsers;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
-    _futureUsers = _userService.getAllUsers();
   }
 
   Future<void> _fetchData() async {
@@ -38,80 +38,64 @@ class _EquipmentDetailsPageState extends State<EquipmentDetailsPage> {
     });
   }
 
-  Future<void> _unassignEquipment() async {
-    try {
-      await _equipmentService.unassignEquipment(
-          equipmentId: widget.equipmentId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Equipment unassigned successfully')),
-        );
-        _refreshEquipment();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error unassigning equipment: $e')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
     final dateFormat = DateFormat('dd/MM/yyyy');
+    final screenHeight = MediaQuery.of(context).size.height;
 
     return Scaffold(
+      backgroundColor: isDarkMode ? const Color(0xFF242E3E) : Colors.white,
       appBar: AppBar(
+        centerTitle: true,
         title: Text(
           'Equipment Details',
-          style: TextStyle(color: colorScheme.onPrimary),
-        ),
-        backgroundColor: colorScheme.primary,
-        actions: [
-          FutureBuilder<Map<String, dynamic>>(
-            future: _futureEquipment,
-            builder: (context, equipmentSnapshot) {
-              if (equipmentSnapshot.connectionState != ConnectionState.done ||
-                  !equipmentSnapshot.hasData) {
-                return const SizedBox.shrink();
-              }
-
-              final isAssigned = equipmentSnapshot.data!['assigned'] == true;
-
-              return FutureBuilder<List<dynamic>>(
-                future: _futureUsers,
-                builder: (context, userSnapshot) {
-                  if (userSnapshot.connectionState != ConnectionState.done ||
-                      !userSnapshot.hasData) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return IconButton(
-                    icon: Icon(
-                        isAssigned ? Icons.person_remove : Icons.person_add),
-                    onPressed: () => isAssigned
-                        ? _unassignEquipment()
-                        : _showAssignDialog(context, userSnapshot.data!),
-                  );
-                },
-              );
-            },
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
           ),
+        ),
+        backgroundColor: isDarkMode
+            ? Colors.black
+            : const Color.fromRGBO(133, 171, 250, 1.0),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [
+          ThemeToggleButton(),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: _refreshEquipment,
+        color: isDarkMode ? Colors.white : const Color(0xFFfda781),
         child: FutureBuilder<Map<String, dynamic>>(
           future: _futureEquipment,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return Center(
+                child: CircularProgressIndicator(
+                  color: isDarkMode
+                      ? Colors.white
+                      : const Color.fromRGBO(133, 171, 250, 1.0),
+                ),
+              );
             } else if (snapshot.hasError) {
-              return Center(child: Text('Error: ${snapshot.error}'));
+              return Center(
+                child: Text(
+                  'Error: ${snapshot.error}',
+                  style: GoogleFonts.inter(
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                ),
+              );
             } else if (!snapshot.hasData || snapshot.data == null) {
-              return const Center(child: Text('No data found'));
+              return Center(
+                child: Text(
+                  'No data found',
+                  style: GoogleFonts.inter(
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                ),
+              );
             } else {
               final equipment = snapshot.data!;
               final typeEquipment = equipment['TypeEquipment'] ?? {};
@@ -121,96 +105,174 @@ class _EquipmentDetailsPageState extends State<EquipmentDetailsPage> {
                   : null;
               final isAssigned = equipment['assigned'] == true;
 
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDetailCard(
-                      children: [
-                        _buildDetailItem('Serial Number:',
-                            equipment['serialNumber'] ?? 'Not specified'),
-                        _buildDetailItem('Designation:',
-                            equipment['designation'] ?? 'Not specified'),
-                        _buildDetailItem('Version:',
-                            equipment['version'] ?? 'Not specified'),
-                        _buildDetailItem('Barcode:',
-                            equipment['barcode'] ?? 'Not specified'),
-                        _buildDetailItem('Status:',
-                            isAssigned ? 'Assigned' : 'Not assigned'),
-                        _buildDetailItem(
-                            'Inventory Date:',
+              return Column(
+                children: [
+                  // Reduced Header Section
+                  Container(
+                    height: screenHeight / 6, // Reduced height
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: isDarkMode
+                          ? const Color(0xFF1A2232)
+                          : const Color.fromRGBO(133, 171, 250, 1.0),
+                      borderRadius: const BorderRadius.only(
+                        bottomLeft: Radius.circular(30),
+                        bottomRight: Radius.circular(30),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Designation only (icon removed)
+                          Text(
+                            equipment['designation'] ?? 'No designation',
+                            style: GoogleFonts.inter(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 10),
+                          // Status
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isAssigned
+                                  ? Colors.green.withOpacity(0.2)
+                                  : Colors.grey.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              isAssigned ? 'Assigned' : 'Not assigned',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Details Section
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Basic Information
+                          Text(
+                            'Basic Information',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+                          _buildDetailItem(
+                            Icons.confirmation_number_outlined,
+                            'Serial Number',
+                            equipment['serialNumber'] ?? 'Not specified',
+                            isDarkMode,
+                          ),
+                          _buildDetailItem(
+                            Icons.code_outlined,
+                            'Version',
+                            equipment['version'] ?? 'Not specified',
+                            isDarkMode,
+                          ),
+                          _buildDetailItem(
+                            Icons.qr_code_outlined,
+                            'Barcode',
+                            equipment['barcode'] ?? 'Not specified',
+                            isDarkMode,
+                          ),
+                          _buildDetailItem(
+                            Icons.calendar_today_outlined,
+                            'Inventory Date',
                             inventoryDate != null
                                 ? dateFormat.format(inventoryDate)
-                                : 'Not specified'),
-                        _buildDetailItem(
-                            'Reference:', equipment['reference'] ?? 'OPM_APP'),
-                      ],
-                      colorScheme: colorScheme,
-                    ),
-                    const SizedBox(height: 20),
-                    _buildDetailCard(
-                      title: 'Equipment Type',
-                      children: [
-                        _buildDetailItem('Name:',
-                            typeEquipment['typeName'] ?? 'Not specified'),
-                        if (typeEquipment['description'] != null)
-                          _buildDetailItem(
-                              'Description:', typeEquipment['description']),
-                      ],
-                      colorScheme: colorScheme,
-                    ),
-                    if (owner.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      _buildDetailCard(
-                        title: 'Owner',
-                        children: [
-                          _buildDetailItem(
-                              'Company:', owner['company'] ?? 'Not specified'),
-                          if (owner['email'] != null)
-                            _buildDetailItem('Email:', owner['email']),
-                          if (owner['phone'] != null)
-                            _buildDetailItem('Phone:', owner['phone']),
-                        ],
-                        colorScheme: colorScheme,
-                      ),
-                    ],
-                    const SizedBox(height: 20),
-                    Center(
-                      child: FutureBuilder<List<dynamic>>(
-                        future: _futureUsers,
-                        builder: (context, userSnapshot) {
-                          if (userSnapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const CircularProgressIndicator();
-                          }
-                          if (userSnapshot.hasError) {
-                            return Text(
-                                'Error loading users: ${userSnapshot.error}');
-                          }
-                          if (!userSnapshot.hasData ||
-                              userSnapshot.data!.isEmpty) {
-                            return const Text('No users available');
-                          }
-
-                          return ElevatedButton(
-                            onPressed: isAssigned
-                                ? _unassignEquipment
-                                : () => _showAssignDialog(
-                                    context, userSnapshot.data!),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  isAssigned ? Colors.red : colorScheme.primary,
+                                : 'Not specified',
+                            isDarkMode,
+                          ),
+                          const Divider(height: 30),
+                          // Equipment Type
+                          Text(
+                            'Equipment Type',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isDarkMode ? Colors.white : Colors.black,
                             ),
-                            child: Text(isAssigned
-                                ? 'Unassign Owner'
-                                : 'Assign Equipment'),
-                          );
-                        },
+                          ),
+                          const SizedBox(height: 15),
+                          _buildDetailItem(
+                            Icons.category_outlined,
+                            'Name',
+                            typeEquipment['typeName'] ?? 'Not specified',
+                            isDarkMode,
+                          ),
+                          if (typeEquipment['description'] != null)
+                            _buildDetailItem(
+                              Icons.description_outlined,
+                              'Description',
+                              typeEquipment['description'],
+                              isDarkMode,
+                            ),
+                          const Divider(height: 30),
+                          // Owner Information (if assigned)
+                          if (owner.isNotEmpty) ...[
+                            Text(
+                              'Owner Information',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: isDarkMode ? Colors.white : Colors.black,
+                              ),
+                            ),
+                            const SizedBox(height: 15),
+                            _buildDetailItem(
+                              Icons.business_outlined,
+                              'Company',
+                              owner['company'] ?? 'Not specified',
+                              isDarkMode,
+                            ),
+                            if (owner['email'] != null)
+                              _buildDetailItem(
+                                Icons.email_outlined,
+                                'Email',
+                                owner['email'],
+                                isDarkMode,
+                              ),
+                            if (owner['phone'] != null)
+                              _buildDetailItem(
+                                Icons.phone_outlined,
+                                'Phone',
+                                owner['phone'],
+                                isDarkMode,
+                              ),
+                            const Divider(height: 30),
+                          ],
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
             }
           },
@@ -219,136 +281,40 @@ class _EquipmentDetailsPageState extends State<EquipmentDetailsPage> {
     );
   }
 
-  Future<void> _showAssignDialog(
-      BuildContext context, List<dynamic> users) async {
-    String? selectedUserId;
-
-    await showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Assign Equipment'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('Select a user to assign this equipment to:'),
-                const SizedBox(height: 20),
-                DropdownButtonFormField<String>(
-                  value: selectedUserId,
-                  hint: const Text('Select User'),
-                  items: users.map((user) {
-                    return DropdownMenuItem<String>(
-                      value: user['_id'],
-                      child: Text(
-                          '${user['firstName']} ${user['lastName']} (${user['email']})'),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    selectedUserId = value;
-                  },
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (selectedUserId != null) {
-                  try {
-                    await _equipmentService.assignEquipmentToUser(
-                      equipmentId: widget.equipmentId,
-                      userId: selectedUserId!,
-                    );
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                            content: Text('Equipment assigned successfully')),
-                      );
-                      _refreshEquipment();
-                      Navigator.pop(context);
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                            content: Text('Error assigning equipment: $e')),
-                      );
-                    }
-                  }
-                } else {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please select a user')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Assign'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildDetailCard({
-    String? title,
-    required List<Widget> children,
-    required ColorScheme colorScheme,
-  }) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (title != null) ...[
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.primary,
-                ),
-              ),
-              const Divider(),
-              const SizedBox(height: 8),
-            ],
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(String label, String value) {
+  Widget _buildDetailItem(
+      IconData icon, String label, String value, bool isDarkMode) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-            ),
+          Icon(
+            icon,
+            size: 20,
+            color: isDarkMode ? Colors.white : Colors.black,
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.grey,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.normal,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

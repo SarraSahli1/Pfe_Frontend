@@ -292,158 +292,137 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
             '${_clientCache[ticket.clientId]?.lastName ?? ''}'
         : 'Loading...';
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: isDarkMode
-            ? Colors.white.withOpacity(0.1)
-            : const Color(0xFFe7eefe),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  ticket.title,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: isDarkMode ? Colors.white : Colors.black,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getStatusColor(ticket.status),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _translateStatus(ticket.status),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AdminTicketDetailsPage(ticketId: ticket.id),
           ),
-          const SizedBox(height: 8),
-          if (ticket.description.isNotEmpty)
-            Text(
-              ticket.description,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: isDarkMode ? Colors.white70 : Colors.grey[700],
-              ),
-            ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today, size: 16),
-              const SizedBox(width: 4),
-              Text(
-                'Created: ${_formatDate(ticket.creationDate)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isDarkMode ? Colors.white70 : Colors.grey[600],
-                ),
-              ),
-              if (ticket.clientId.isNotEmpty) ...[
-                const Spacer(),
-                if (_loadingStates[ticket.clientId] == true)
-                  SizedBox(
-                    width: 100,
-                    height: 12,
-                    child: LinearProgressIndicator(
-                      backgroundColor:
-                          isDarkMode ? Colors.grey[800] : Colors.grey[200],
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-                    ),
-                  )
-                else if (_clientCache.containsKey(ticket.clientId))
-                  Row(
-                    children: [
-                      const Icon(Icons.person, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        clientName,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: isDarkMode ? Colors.white70 : Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  )
-                else
-                  IconButton(
-                    icon: const Icon(Icons.refresh, size: 16),
-                    onPressed: () => _loadClientInfo(ticket.clientId),
-                    color: Colors.orange,
-                  ),
-              ],
-            ],
-          ),
-          if (ticket.equipmentHardIds?.isNotEmpty ?? false)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.computer, size: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Equipment: ${ticket.equipmentHardIds!.length}',
+        );
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: isDarkMode
+              ? Colors.white.withOpacity(0.1)
+              : const Color(0xFFe7eefe),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    ticket.title,
                     style: TextStyle(
-                      fontSize: 12,
-                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isDarkMode ? Colors.white : Colors.black,
                     ),
                   ),
-                ],
-              ),
-            ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert,
-                  color: isDarkMode ? Colors.white : Colors.black),
-              itemBuilder: (BuildContext context) => [
-                PopupMenuItem<String>(
-                  value: 'see',
-                  child: Row(
-                    children: [
-                      Icon(Icons.remove_red_eye,
-                          color: isDarkMode ? Colors.white : Colors.black),
-                      const SizedBox(width: 8),
-                      Text('See details',
-                          style: TextStyle(
-                              color: isDarkMode ? Colors.white : Colors.black)),
-                    ],
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(ticket.status),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _translateStatus(ticket.status),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
-              onSelected: (String value) {
-                if (value == 'see') {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          AdminTicketDetailsPage(ticketId: ticket.id),
-                    ),
-                  );
-                }
-              },
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            if (ticket.description.isNotEmpty)
+              Text(
+                ticket.description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: isDarkMode ? Colors.white70 : Colors.grey[700],
+                ),
+              ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today, size: 16),
+                const SizedBox(width: 4),
+                Text(
+                  'Created: ${_formatDate(ticket.creationDate)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                  ),
+                ),
+                if (ticket.clientId.isNotEmpty) ...[
+                  const Spacer(),
+                  if (_loadingStates[ticket.clientId] == true)
+                    SizedBox(
+                      width: 100,
+                      height: 12,
+                      child: LinearProgressIndicator(
+                        backgroundColor:
+                            isDarkMode ? Colors.grey[800] : Colors.grey[200],
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(Colors.orange),
+                      ),
+                    )
+                  else if (_clientCache.containsKey(ticket.clientId))
+                    Row(
+                      children: [
+                        const Icon(Icons.person, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          clientName,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color:
+                                isDarkMode ? Colors.white70 : Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.refresh, size: 16),
+                      onPressed: () => _loadClientInfo(ticket.clientId),
+                      color: Colors.orange,
+                    ),
+                ],
+              ],
+            ),
+            if (ticket.equipmentHardIds?.isNotEmpty ?? false)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.computer, size: 16),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Equipment: ${ticket.equipmentHardIds!.length}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

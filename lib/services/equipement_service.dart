@@ -1,23 +1,21 @@
 import 'dart:convert';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
 class EquipmentService {
-  static const String baseUrl =
-      "http://192.168.1.16:3000"; // Replace with your API URL
-
   Future<Map<String, dynamic>> createEquipment({
     required Map<String, dynamic> data,
     String? serialNumber,
   }) async {
-    final Uri url =
-        Uri.parse('$baseUrl/equipmentHelpdesk/createEquipmentHelpdesk');
+    final Uri url = Uri.parse(
+        '${Config.baseUrl}/equipmentHelpdesk/createEquipmentHelpdesk');
 
     try {
       if (serialNumber != null) {
         final checkResponse = await http.get(
           Uri.parse(
-              '$baseUrl/equipmentHelpdesk/checkSerial?serialNumber=$serialNumber'),
+              '${Config.baseUrl}/equipmentHelpdesk/checkSerial?serialNumber=$serialNumber'),
         );
         if (checkResponse.statusCode == 409) {
           throw Exception('Duplicated Serial Number');
@@ -58,7 +56,8 @@ class EquipmentService {
         throw Exception('Equipment ID cannot be empty');
       }
 
-      final Uri url = Uri.parse('$baseUrl/equipmentHelpdesk/updateEquipment');
+      final Uri url =
+          Uri.parse('${Config.baseUrl}/equipmentHelpdesk/updateEquipment');
 
       // Structure corrigée pour matcher Postman
       final requestBody = {
@@ -92,7 +91,7 @@ class EquipmentService {
   }
 
   Future<Map<String, dynamic>> deleteEquipment({required String id}) async {
-    final Uri url = Uri.parse('$baseUrl/equipment/deleteEquipment');
+    final Uri url = Uri.parse('${Config.baseUrl}/equipment/deleteEquipment');
 
     try {
       final response = await http.delete(
@@ -117,7 +116,8 @@ class EquipmentService {
   }
 
   Future<List<dynamic>> getAllEquipment() async {
-    final Uri url = Uri.parse('$baseUrl/equipmentHelpdesk/getAllEquipment');
+    final Uri url =
+        Uri.parse('${Config.baseUrl}/equipmentHelpdesk/getAllEquipment');
 
     try {
       final response = await http.get(url);
@@ -125,17 +125,14 @@ class EquipmentService {
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
 
-        // Check if the response contains the expected structure
         if (responseData.containsKey('rows')) {
-          return responseData['rows']; // Return the list of equipment
+          return responseData['rows'];
         } else {
           throw Exception('Invalid response format: missing "rows" field');
         }
       } else if (response.statusCode == 404) {
-        // Handle "not found" case specifically if needed
         throw Exception('No equipment found');
       } else {
-        // Try to extract error message from response
         final errorData = jsonDecode(response.body);
         final errorMsg = errorData['message'] ?? 'Failed to load equipment';
         throw Exception('$errorMsg (Status: ${response.statusCode})');
@@ -146,16 +143,14 @@ class EquipmentService {
   }
 
   Future<Map<String, dynamic>> getEquipmentDetails({required String id}) async {
-    final Uri url = Uri.parse(
-        '$baseUrl/equipmentHelpdesk/$id'); // Endpoint pour récupérer les détails d'un équipement
+    final Uri url = Uri.parse('${Config.baseUrl}/equipmentHelpdesk/$id');
 
     try {
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> responseData = jsonDecode(response.body);
-        return responseData[
-            'rows']; // Retourne uniquement les détails de l'équipement
+        return responseData['rows'];
       } else {
         throw Exception(
             'Failed to fetch equipment details: ${response.statusCode}');
@@ -174,7 +169,8 @@ class EquipmentService {
     required String typeEquipmentId,
     required String token,
   }) async {
-    final Uri url = Uri.parse('$baseUrl/equipmentHelpdesk/createmyEquipment');
+    final Uri url =
+        Uri.parse('${Config.baseUrl}/equipmentHelpdesk/createmyEquipment');
 
     try {
       final response = await http.post(
@@ -190,9 +186,6 @@ class EquipmentService {
           'barcode': barcode,
           'inventoryDate': inventoryDate?.toIso8601String(),
           'TypeEquipment': typeEquipmentId,
-          // 'assigned' is automatically set to false by backend
-          // 'reference' is automatically set to 'OPM_APP' by backend
-          // 'owner' is set by backend using req.user._id
         }),
       );
 
@@ -217,7 +210,7 @@ class EquipmentService {
     }
 
     final response = await http.get(
-      Uri.parse('$baseUrl/equipmentHelpdesk/myEquipment'),
+      Uri.parse('${Config.baseUrl}/equipmentHelpdesk/myEquipment'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
@@ -231,38 +224,11 @@ class EquipmentService {
     }
   }
 
-  Future<Map<String, dynamic>> assignEquipmentToUser({
-    required String equipmentId,
-    required String userId,
-  }) async {
-    final Uri url = Uri.parse('$baseUrl/equipmentHelpdesk/assignEquipmentUser');
-
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'equipmentId': equipmentId,
-          'userId': userId,
-        }),
-      );
-
-      final responseData = jsonDecode(response.body);
-
-      if (response.statusCode == 200) {
-        return responseData['rows'];
-      } else {
-        throw Exception(responseData['message'] ?? 'Assignment failed');
-      }
-    } catch (e) {
-      throw Exception('Error assigning equipment: $e');
-    }
-  }
-
   Future<Map<String, dynamic>> unassignEquipment({
     required String equipmentId,
   }) async {
-    final Uri url = Uri.parse('$baseUrl/equipmentHelpdesk/unassignEquipment');
+    final Uri url =
+        Uri.parse('${Config.baseUrl}/equipmentHelpdesk/unassignEquipment');
 
     try {
       final response = await http.post(
@@ -282,6 +248,68 @@ class EquipmentService {
       }
     } catch (e) {
       throw Exception('Error unassigning equipment: $e');
+    }
+  }
+
+  // Add to EquipmentService class
+  Future<List<dynamic>> getUnassignedEquipment() async {
+    try {
+      print(
+          'Fetching unassigned equipment from ${Config.baseUrl}/equipmentHelpdesk/getUnassignedEquipment');
+      final response = await http.get(
+        Uri.parse('${Config.baseUrl}/equipmentHelpdesk/getUnassignedEquipment'),
+        headers: {'Content-Type': 'application/json'},
+      ).timeout(const Duration(seconds: 10));
+
+      print('Response status: ${response.statusCode}');
+      print('Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['err'] == false) {
+          return data['rows'] as List;
+        }
+      }
+      throw Exception('Failed to load unassigned equipment');
+    } catch (e) {
+      print('Error fetching unassigned equipment: $e');
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
+  Future<void> assignEquipmentToUser(String equipmentId, String userId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${Config.baseUrl}/equipmentHelpdesk/assignEquipmentUser'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'equipmentId': equipmentId, 'userId': userId}),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to assign equipment');
+      }
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
+    }
+  }
+
+  Future<List<dynamic>> getUserEquipment(String userId) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+            '${Config.baseUrl}/equipmentHelpdesk/getUserEquipment/$userId'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['err'] == false) {
+          return data['rows'] as List;
+        }
+      }
+      throw Exception('Failed to load user equipment');
+    } catch (e) {
+      throw Exception('Error: ${e.toString()}');
     }
   }
 }

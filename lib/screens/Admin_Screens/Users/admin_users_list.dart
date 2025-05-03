@@ -74,13 +74,16 @@ class _AdminUsersState extends State<AdminUsersList> {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Users List'),
+        title: const Text('Users List', style: TextStyle(color: Colors.white)),
+        backgroundColor: isDarkMode ? Colors.black : const Color(0xFF628ff6),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
-            icon: const Icon(Icons.pending_actions),
+            icon: const Icon(Icons.pending_actions, color: Colors.white),
             onPressed: () {
               Navigator.push(
                 context,

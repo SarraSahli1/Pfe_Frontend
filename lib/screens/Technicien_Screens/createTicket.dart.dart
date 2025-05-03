@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
-import 'package:helpdeskfrontend/widgets/navbar_client.dart';
+import 'package:helpdeskfrontend/widgets/navbar_technicien.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/services/equipement_service.dart';
@@ -79,7 +79,7 @@ class _CreateTicketPageState extends State<CreateTicketPage> {
             } else {
               debugPrint('No valid TypeEquipment _id for initial equipment');
               _equipmentProblems = [
-                {'_id': 'other', 'nomProblem': 'Other (please specify)'}
+                {'_id': 'other', 'nomProblem': 'Autre (précisez)'}
               ];
             }
           } else {
@@ -126,7 +126,7 @@ class _CreateTicketPageState extends State<CreateTicketPage> {
           // Add "Other" option
           _equipmentProblems.add({
             '_id': 'other',
-            'nomProblem': 'Other (please specify)',
+            'nomProblem': 'Autre (précisez)',
           });
         });
       }
@@ -341,7 +341,7 @@ class _CreateTicketPageState extends State<CreateTicketPage> {
                 _showError(
                     'Selected equipment has no valid type. Please select "Other" to describe your issue.');
                 _equipmentProblems = [
-                  {'_id': 'other', 'nomProblem': 'Other (please specify)'}
+                  {'_id': 'other', 'nomProblem': 'Autre (précisez)'}
                 ];
                 _selectedProblemId = 'other';
                 _showOtherProblemField = true;
@@ -725,7 +725,7 @@ class _CreateTicketPageState extends State<CreateTicketPage> {
           ),
         ),
       ),
-      bottomNavigationBar: NavbarClient(
+      bottomNavigationBar: NavbarTechnician(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
       ),

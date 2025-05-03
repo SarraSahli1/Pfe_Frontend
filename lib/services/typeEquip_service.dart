@@ -1,13 +1,12 @@
 import 'dart:convert';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
-
 import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
 
 class TypeEquipmentService {
-  final String baseUrl =
-      "http://192.168.1.16:3000"; // Remplacez par l'URL de votre API
+  final String baseUrl = Config.baseUrl; // Use baseUrl from Config class
 
   // Méthode pour créer un TypeEquipment
   Future<Map<String, dynamic>> createTypeEquipment({

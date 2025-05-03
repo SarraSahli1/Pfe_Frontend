@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Users/admin_users_list.dart';
@@ -7,10 +5,12 @@ import 'package:helpdeskfrontend/screens/Client_Screens/Dashboard/client_dashboa
 import 'package:helpdeskfrontend/screens/First_Screens/role_screen.dart';
 import 'package:helpdeskfrontend/screens/Technicien_Screens/tech_dashboard.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
+import 'package:helpdeskfrontend/services/socket_service.dart';
 import 'package:helpdeskfrontend/theme/theme.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/provider/notification_provider.dart';
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -25,76 +25,119 @@ class _SignInScreenState extends State<SignInScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final AuthService _authService = AuthService();
+  final SocketService _socketService = SocketService();
+  late NotificationProvider _notificationProvider;
+  bool _isMounted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _isMounted = true;
+    _notificationProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+  }
 
   @override
   void dispose() {
+    _isMounted = false;
     _emailController.dispose();
     _passwordController.dispose();
+    _socketService.disconnect();
     super.dispose();
   }
 
   Future<void> _handleSignIn() async {
-    if (_formSignInKey.currentState!.validate() && rememberPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Connexion en cours...'),
-        ),
-      );
+    if (!_formSignInKey.currentState!.validate() || !rememberPassword) {
+      if (!rememberPassword && _isMounted) {
+        _showError('Veuillez accepter le traitement des données personnelles');
+      }
+      return;
+    }
 
+    if (_isMounted) _showError('Connexion en cours...');
+
+    try {
       final result = await _authService.loginUser(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      if (!_isMounted) return;
 
-      if (result['success']) {
-        final userAuthority = result['payload']['user']['authority'];
-        print('Rôle de l\'utilisateur: $userAuthority'); // Pour déboguer
-
-        if (userAuthority == 'admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AdminUsersList(),
-            ),
-          );
-        } else if (userAuthority == 'client') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const ClientDashboard(),
-            ),
-          );
-        } else if (userAuthority == 'technician') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const TechnicianDashboard(),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Rôle utilisateur non reconnu'),
-            ),
-          );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message']),
-          ),
-        );
+      if (!result['success']) {
+        _showError(result['message'] ?? 'Échec de la connexion');
+        return;
       }
-    } else if (!rememberPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Veuillez accepter le traitement des données personnelles'),
-        ),
+
+      final payload = result['payload'];
+      final accessToken = result['accessToken'];
+
+      if (payload == null || payload['user'] == null || accessToken == null) {
+        _showError('Erreur: Données utilisateur ou token manquants');
+        return;
+      }
+
+      final user = payload['user'];
+      final String? userId = user['_id']?.toString();
+      final String? token = accessToken?.toString();
+      final String? userAuthority = user['authority']?.toString();
+
+      if (userId == null || token == null || userAuthority == null) {
+        _showError('Erreur: Informations utilisateur incomplètes');
+        return;
+      }
+
+      print('SignInScreen: Initializing SocketService for user $userId');
+      _socketService.initialize(
+        userId: userId,
+        onNotification: _notificationProvider.addNotification,
       );
+      _socketService.connect(token);
+
+      _socketService.onConnectionStatus = (isConnected) {
+        if (_isMounted && !isConnected) {
+          _showError('Échec de la connexion au serveur de chat');
+        }
+      };
+
+      _navigateToDashboard(userAuthority);
+    } catch (e) {
+      if (_isMounted) {
+        _showError('Une erreur est survenue: ${e.toString()}');
+      }
     }
+  }
+
+  void _navigateToDashboard(String authority) {
+    if (!_isMounted) return;
+
+    Widget destination;
+    switch (authority) {
+      case 'admin':
+        destination = const AdminUsersList();
+        break;
+      case 'client':
+        destination = const ClientDashboard();
+        break;
+      case 'technician':
+        destination = const TechnicianDashboard();
+        break;
+      default:
+        _showError('Rôle utilisateur non reconnu');
+        return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => destination),
+    );
+  }
+
+  void _showError(String message) {
+    if (!_isMounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   Widget _buildTextField({
@@ -121,10 +164,7 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
               validator: validator,
               decoration: InputDecoration(
-                prefixIcon: Icon(
-                  icon,
-                  color: hintColor,
-                ),
+                prefixIcon: Icon(icon, color: hintColor),
                 labelText: label,
                 labelStyle: GoogleFonts.poppins(
                   color: hintColor,
@@ -156,17 +196,14 @@ class _SignInScreenState extends State<SignInScreen> {
         ? darkColorScheme
         : lightColorScheme;
 
-    // Dynamic background image based on theme
     final backgroundImage = themeProvider.themeMode == ThemeMode.dark
         ? 'assets/images/bg_dark.png'
         : 'assets/images/bg_light.png';
 
-    // Dynamic logo based on theme
     final logoImage = themeProvider.themeMode == ThemeMode.dark
         ? 'assets/images/opmlogo.png'
         : 'assets/images/logoopm_light.png';
 
-    // Determine text color based on theme
     final textColor = themeProvider.themeMode == ThemeMode.dark
         ? colorScheme.onPrimary
         : Colors.black;
@@ -174,7 +211,6 @@ class _SignInScreenState extends State<SignInScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          // Background Image (without frosted glass effect)
           Container(
             decoration: BoxDecoration(
               image: DecorationImage(
@@ -183,8 +219,6 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
           ),
-
-          // Content
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -197,7 +231,6 @@ class _SignInScreenState extends State<SignInScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        // Logo
                         SizedBox(
                           height: 300,
                           width: 300,
@@ -207,9 +240,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             semanticLabel: 'HelpDesk Logo',
                           ),
                         ),
-                        const SizedBox(height: 10), // Reduced spacing
-
-                        // Login Form
+                        const SizedBox(height: 10),
                         Form(
                           key: _formSignInKey,
                           child: Column(
@@ -236,14 +267,29 @@ class _SignInScreenState extends State<SignInScreen> {
                                 backgroundColor: colorScheme.surface,
                                 icon: Icons.lock,
                               ),
-                              const SizedBox(height: 20), // Reduced spacing
+                              const SizedBox(height: 20),
                               Row(
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   GestureDetector(
-                                    onTap: () {
-                                      // Handle forgot password
+                                    onTap: () async {
+                                      if (_emailController.text.isEmpty) {
+                                        _showError(
+                                            'Veuillez entrer votre email');
+                                        return;
+                                      }
+                                      final result =
+                                          await _authService.forgotPassword(
+                                        email: _emailController.text.trim(),
+                                      );
+                                      if (_isMounted) {
+                                        if (result['success']) {
+                                          _showError(result['message']);
+                                        } else {
+                                          _showError(result['message']);
+                                        }
+                                      }
                                     },
                                     child: Text(
                                       'Mot de passe oublié ?',
@@ -257,7 +303,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 20), // Reduced spacing
+                              const SizedBox(height: 20),
                               Container(
                                 width: double.infinity,
                                 height: 50,
@@ -284,7 +330,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 15), // Reduced spacing
+                              const SizedBox(height: 15),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
@@ -328,11 +374,9 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
           ),
-
-          // Theme Toggle Button in the top-right corner
           Positioned(
-            top: 10, // Adjust top position as needed
-            right: 10, // Adjust right position as needed
+            top: 10,
+            right: 10,
             child: ThemeToggleButton(),
           ),
         ],

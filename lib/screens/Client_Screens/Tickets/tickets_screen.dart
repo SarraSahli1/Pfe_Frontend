@@ -10,6 +10,7 @@ import 'package:helpdeskfrontend/provider/theme_provider.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:helpdeskfrontend/services/socket_service.dart'; // Import SocketService
 
 class TicketsScreen extends StatefulWidget {
   const TicketsScreen({Key? key}) : super(key: key);
@@ -25,24 +26,76 @@ class _TicketsScreenState extends State<TicketsScreen> {
   int _selectedIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   final AuthService _authService = AuthService();
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
+  String? _selectedTypeFilter;
+  late SocketService _socketService; // SocketService instance
+  bool _isSocketConnected = false;
 
   @override
   void initState() {
     super.initState();
+    _initializeSocketService();
     _loadInitialData();
     _searchController.addListener(_filterTickets);
   }
 
   @override
   void dispose() {
+    _socketService.disconnect(); // Disconnect socket on dispose
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _initializeSocketService() async {
+    try {
+      final token = await _authService.getToken();
+      final userId = await _authService.getCurrentUserId();
+      if (token != null && userId != null) {
+        _socketService = SocketService();
+        _socketService.initialize(
+          userId: userId,
+          onNotification: (data) {
+            print("Received notification: $data");
+            if (data['type'] == 'chat_message') {
+              // Show a snackbar for new chat messages
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('New message in ticket ${data['ticketId']}'),
+                  action: SnackBarAction(
+                    label: 'View',
+                    onPressed: () {
+                      // Navigate to the ticket's chat screen
+                      _navigateToTicketDetail(
+                        _ticketsFuture.then((tickets) => tickets.firstWhere(
+                              (ticket) => ticket.id == data['ticketId'],
+                              orElse: () => throw Exception('Ticket not found'),
+                            )) as Ticket,
+                      );
+                    },
+                  ),
+                ),
+              );
+            }
+            _refreshTickets(); // Refresh tickets for any notification
+          },
+        );
+        _socketService.onConnectionStatus = (isConnected) {
+          setState(() {
+            _isSocketConnected = isConnected;
+          });
+          if (!isConnected) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Socket disconnected. Reconnecting...')),
+            );
+          }
+        };
+        _socketService.connect(token);
+      }
+    } catch (e) {
+      print("Error initializing socket: $e");
+      setState(() {
+        _errorMessage = 'Failed to initialize real-time updates.';
+      });
+    }
   }
 
   Future<void> _loadInitialData() async {
@@ -67,7 +120,6 @@ class _TicketsScreenState extends State<TicketsScreen> {
         _isRefreshing = true;
         _errorMessage = null;
       });
-
       final tickets = await TicketService.getTicketsByClient();
       setState(() {
         _ticketsFuture = Future.value(tickets);
@@ -88,6 +140,12 @@ class _TicketsScreenState extends State<TicketsScreen> {
     setState(() {});
   }
 
+  void _filterByType(String? type) {
+    setState(() {
+      _selectedTypeFilter = type;
+    });
+  }
+
   Future<void> _refreshTickets() async {
     if (_isRefreshing) return;
     await _loadTickets();
@@ -98,7 +156,6 @@ class _TicketsScreenState extends State<TicketsScreen> {
       context,
       MaterialPageRoute(builder: (context) => CreateTicketPage()),
     );
-
     if (result == true) {
       await _refreshTickets();
     }
@@ -110,29 +167,9 @@ class _TicketsScreenState extends State<TicketsScreen> {
       barrierDismissible: false,
       builder: (context) => const Center(child: CircularProgressIndicator()),
     );
-
     try {
       final token = await _authService.getToken();
       final userId = await _authService.getCurrentUserId();
-
-      print('Token before TicketDetail: $token');
-      print('User ID before TicketDetail: $userId');
-
-      if (token == null || userId == null) {
-        print('Authentication data missing, proceeding with null values');
-        if (mounted) {
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                  'Authentication data missing. Some features may not work.'),
-              duration: Duration(seconds: 6),
-            ),
-          );
-        }
-      }
-
-      print('Navigating to TicketDetailScreen');
       if (mounted) {
         Navigator.of(context).pop();
         Navigator.push(
@@ -140,14 +177,13 @@ class _TicketsScreenState extends State<TicketsScreen> {
           MaterialPageRoute(
             builder: (context) => TicketDetailScreen(
               ticket: ticket,
-              token: token ?? '', // Use empty string if null
-              currentUserId: userId ?? '', // Use empty string if null
+              token: token ?? '',
+              currentUserId: userId ?? '',
             ),
           ),
         );
       }
     } catch (e) {
-      print('Error in _navigateToTicketDetail: $e');
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -164,7 +200,6 @@ class _TicketsScreenState extends State<TicketsScreen> {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
-    final gradientStop = 0.25;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -174,29 +209,47 @@ class _TicketsScreenState extends State<TicketsScreen> {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: isDarkMode
-                ? [const Color(0xFF141218), const Color(0xFF242e3e)]
-                : [const Color(0xFF628ff6), const Color(0xFFf7f9f5)],
-            stops: [gradientStop, gradientStop],
+                ? [Color(0xFF141218), Color(0xFF242E3E)]
+                : [Color(0xFF628FF6).withOpacity(0.8), Color(0xFFF7F9F5)],
+            stops: [0.5, 1.0],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0, vertical: 12.0),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'My Tickets',
-                      style: GoogleFonts.poppins(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.assignment, color: Colors.white, size: 28),
+                        SizedBox(width: 8),
+                        Text(
+                          'My Tickets',
+                          style: GoogleFonts.poppins(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Icon(
+                          _isSocketConnected
+                              ? Icons.cloud_done
+                              : Icons.cloud_off,
+                          color: _isSocketConnected ? Colors.green : Colors.red,
+                          size: 20,
+                        ),
+                      ],
                     ),
-                    const ThemeToggleButton(),
+                    CircleAvatar(
+                      backgroundColor: Colors.orange.withOpacity(0.2),
+                      radius: 20,
+                      child: ThemeToggleButton(),
+                    ),
                   ],
                 ),
               ),
@@ -205,13 +258,13 @@ class _TicketsScreenState extends State<TicketsScreen> {
                     const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
-                    borderRadius: BorderRadius.circular(25.0),
+                    color: isDarkMode ? Color(0xFF3A4352) : Colors.white,
+                    borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
                       ),
                     ],
                   ),
@@ -220,32 +273,65 @@ class _TicketsScreenState extends State<TicketsScreen> {
                     decoration: InputDecoration(
                       hintText: 'Search tickets...',
                       hintStyle: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.grey[600],
+                          color:
+                              isDarkMode ? Colors.grey[400] : Colors.grey[600]),
+                      prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: Icon(Icons.clear, color: Colors.orange),
+                              onPressed: () =>
+                                  setState(() => _searchController.clear()),
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
                       ),
-                      prefixIcon: Icon(
-                        Icons.search,
-                        color: isDarkMode ? Colors.white : Colors.grey[600],
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20.0,
-                        vertical: 15.0,
-                      ),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 24, vertical: 18),
                     ),
                     style: TextStyle(
-                      color: isDarkMode ? Colors.white : Colors.black,
-                    ),
+                        color: isDarkMode ? Colors.white : Colors.black),
                   ),
+                ),
+              ),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildTypeFilterChip(context,
+                        type: null,
+                        label: 'All',
+                        icon: Icons.all_inclusive,
+                        isSelected: _selectedTypeFilter == null),
+                    _buildTypeFilterChip(context,
+                        type: 'service',
+                        label: 'Service',
+                        icon: Icons.handyman,
+                        isSelected: _selectedTypeFilter == 'service'),
+                    _buildTypeFilterChip(context,
+                        type: 'equipment',
+                        label: 'Equipment',
+                        icon: Icons.computer,
+                        isSelected: _selectedTypeFilter == 'equipment'),
+                  ],
                 ),
               ),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF242E3E) : Colors.white,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(30),
-                      topRight: Radius.circular(30),
-                    ),
+                    color: isDarkMode ? Color(0xFF242E3E) : Color(0xFFf7f9f5),
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(20)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 10,
+                        offset: Offset(0, -2),
+                      ),
+                    ],
                   ),
                   child: _buildBody(),
                 ),
@@ -254,16 +340,75 @@ class _TicketsScreenState extends State<TicketsScreen> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _navigateToCreateTicket,
-        child: const Icon(Icons.add, color: Colors.white),
+        label: Text('Create Ticket', style: TextStyle(color: Colors.white)),
+        icon: Icon(Icons.add, color: Colors.white),
         backgroundColor: Colors.orange,
         elevation: 4,
-        tooltip: 'Create Ticket',
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
       bottomNavigationBar: NavbarClient(
         currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        onTap: (index) => setState(() => _selectedIndex = index),
+      ),
+    );
+  }
+
+  Widget _buildTypeFilterChip(
+    BuildContext context, {
+    required String? type,
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+  }) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+
+    return GestureDetector(
+      onTap: () => _filterByType(type),
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 200),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? (type == 'service'
+                  ? Colors.orange
+                  : type == 'equipment'
+                      ? Colors.blue
+                      : Colors.grey)
+              : (isDarkMode ? Color(0xFF3A4352) : Colors.white),
+          borderRadius: BorderRadius.circular(50),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 6,
+                      offset: Offset(0, 2))
+                ]
+              : [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon,
+                size: 20,
+                color: isSelected
+                    ? Colors.white
+                    : (isDarkMode ? Colors.white : Colors.black)),
+            SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: isSelected
+                    ? Colors.white
+                    : (isDarkMode ? Colors.white : Colors.black),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -285,32 +430,31 @@ class _TicketsScreenState extends State<TicketsScreen> {
               !_isRefreshing) {
             return _buildLoading();
           }
-
           if (snapshot.hasError) {
             return _buildError(snapshot.error.toString());
           }
-
           final tickets = snapshot.data ?? [];
           if (tickets.isEmpty) {
             return _buildEmptyState();
           }
-
-          return _buildTicketList(tickets);
+          return _buildTicketGrid(tickets);
         },
       ),
     );
   }
 
   Widget _buildLoading() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-          ),
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.orange)),
           SizedBox(height: 16),
-          Text('Loading tickets...'),
+          Text(
+            'Loading tickets...',
+            style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[600]),
+          ),
         ],
       ),
     );
@@ -324,38 +468,39 @@ class _TicketsScreenState extends State<TicketsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 50, color: Colors.red),
-          const SizedBox(height: 16),
+          Icon(Icons.error_outline, size: 60, color: Colors.red),
+          SizedBox(height: 16),
           Text(
             'Loading Error',
             style: GoogleFonts.poppins(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : Colors.black,
+              color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32.0),
             child: Text(
               error,
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: isDarkMode ? Colors.white : Colors.black,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          ElevatedButton(
+          SizedBox(height: 16),
+          ElevatedButton.icon(
             onPressed: _refreshTickets,
+            icon: Icon(Icons.refresh, size: 20),
+            label: Text('Try Again'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  borderRadius: BorderRadius.circular(20)),
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text('Try Again'),
           ),
         ],
       ),
@@ -363,32 +508,42 @@ class _TicketsScreenState extends State<TicketsScreen> {
   }
 
   Widget _buildAuthError() {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.person_outline, size: 50, color: Colors.red),
-          const SizedBox(height: 16),
+          Icon(Icons.person_off, size: 60, color: Colors.red),
+          SizedBox(height: 16),
           Text(
-            'Authentication Problem',
+            'Authentication Issue',
             style: GoogleFonts.poppins(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
-          const SizedBox(height: 8),
-          Text(_errorMessage ?? 'Please try again later'),
-          const SizedBox(height: 16),
-          ElevatedButton(
+          SizedBox(height: 8),
+          Text(
+            _errorMessage ?? 'Please try again later',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+          SizedBox(height: 16),
+          ElevatedButton.icon(
             onPressed: _refreshTickets,
+            icon: Icon(Icons.refresh, size: 20),
+            label: Text('Retry'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  borderRadius: BorderRadius.circular(20)),
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text('Retry'),
           ),
         ],
       ),
@@ -404,37 +559,45 @@ class _TicketsScreenState extends State<TicketsScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.assignment,
-            size: 60,
+            Icons.assignment_turned_in,
+            size: 80,
             color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
-            'No tickets found',
+            'No Tickets Yet',
             style: GoogleFonts.poppins(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : Colors.black,
+              color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
-          const SizedBox(height: 8),
-          ElevatedButton(
+          SizedBox(height: 8),
+          Text(
+            'Create your first ticket now!',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+          SizedBox(height: 16),
+          ElevatedButton.icon(
             onPressed: _navigateToCreateTicket,
+            icon: Icon(Icons.add, size: 20),
+            label: Text('Create Ticket'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  borderRadius: BorderRadius.circular(20)),
+              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
-            child: const Text('Create Ticket'),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTicketList(List<Ticket> tickets) {
+  Widget _buildTicketGrid(List<Ticket> tickets) {
     final filteredTickets = _searchController.text.isEmpty
         ? tickets
         : tickets
@@ -447,94 +610,118 @@ class _TicketsScreenState extends State<TicketsScreen> {
                     .contains(_searchController.text.toLowerCase()))
             .toList();
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-      itemCount: filteredTickets.length,
-      itemBuilder: (context, index) {
-        final ticket = filteredTickets[index];
-        return _buildTicketCard(ticket);
-      },
+    final typeFilteredTickets = _selectedTypeFilter == null
+        ? filteredTickets
+        : filteredTickets
+            .where((ticket) => ticket.typeTicket == _selectedTypeFilter)
+            .toList();
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+        childAspectRatio: 0.85,
+      ),
+      itemCount: typeFilteredTickets.length,
+      itemBuilder: (context, index) =>
+          _buildGridTicketCard(typeFilteredTickets[index]),
     );
   }
 
-  Widget _buildTicketCard(Ticket ticket) {
+  Widget _buildGridTicketCard(Ticket ticket) {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
     return InkWell(
       onTap: () => _navigateToTicketDetail(ticket),
+      splashColor: Colors.orange.withOpacity(0.2),
+      borderRadius: BorderRadius.circular(15),
       child: Card(
-        margin: const EdgeInsets.only(bottom: 16.0),
         elevation: 4,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(15.0),
-        ),
-        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        color: isDarkMode ? Color(0xFF3A4352) : Colors.white,
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Text(
-                      ticket.title,
-                      style: GoogleFonts.poppins(
-                        fontSize: 18.0,
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black87,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: _getStatusColor(ticket.status),
+                      gradient: LinearGradient(
+                        colors: [
+                          _getStatusColor(ticket.status),
+                          _getStatusColor(ticket.status).withOpacity(0.7)
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       _translateStatus(ticket.status),
-                      style: const TextStyle(
+                      style: GoogleFonts.poppins(
                         color: Colors.white,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
+                  Icon(
+                    ticket.typeTicket == 'service'
+                        ? Icons.handyman
+                        : Icons.computer,
+                    size: 20,
+                    color: ticket.typeTicket == 'service'
+                        ? Colors.orange
+                        : Colors.blue,
+                  ),
                 ],
               ),
-              const SizedBox(height: 8),
-              if (ticket.description.isNotEmpty)
-                Text(
+              SizedBox(height: 8),
+              Text(
+                ticket.title,
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: isDarkMode ? Colors.white : Colors.black87,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              SizedBox(height: 8),
+              Expanded(
+                child: Text(
                   ticket.description,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: isDarkMode ? Colors.white70 : Colors.black54,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: isDarkMode ? Colors.white : Colors.black87,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Created: ${_formatDate(ticket.creationDate)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ),
+              if (ticket.resolvedDate != null)
+                Text(
+                  'Resolved: ${_formatDate(ticket.resolvedDate!)}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.green,
                   ),
                 ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _formatDate(ticket.creationDate),
-                    style: TextStyle(
-                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                  ),
-                  if (ticket.resolvedDate != null)
-                    Text(
-                      'Resolved: ${_formatDate(ticket.resolvedDate!)}',
-                      style: const TextStyle(color: Colors.green),
-                    ),
-                ],
-              ),
             ],
           ),
         ),
@@ -574,7 +761,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
       case 'expired':
         return Colors.red;
       case 'deleted':
-        return Colors.black54;
+        return Colors.grey[700]!;
       default:
         return Colors.blueGrey;
     }
