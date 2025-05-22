@@ -242,11 +242,11 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
       {'label': 'Date d\'expiration', 'value': _formatDate(user.expiredAt)},
       {
         'label': 'Signature',
-        'value': user.signature ?? 'N/A'
+        'value': (user.signature ?? 'N/A').toString()
       }, // Conservez cette ligne si vous voulez afficher le texte
       {
         'label': 'Signature (Image)',
-        'value': user.signature ?? 'N/A'
+        'value': (user.signature ?? 'N/A').toString()
       }, // Ajoutez cette ligne pour l'URL de l'image
     ];
   }
