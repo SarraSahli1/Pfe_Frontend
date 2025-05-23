@@ -42,7 +42,6 @@ class _SignInScreenState extends State<SignInScreen> {
     _isMounted = false;
     _emailController.dispose();
     _passwordController.dispose();
-    _socketService.disconnect();
     super.dispose();
   }
 

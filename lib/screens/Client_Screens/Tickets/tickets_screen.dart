@@ -1,16 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:helpdeskfrontend/models/ticket.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Tickets/createTicket.dart.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Tickets/ticket_detail_screen.dart';
-import 'package:helpdeskfrontend/services/ticket_service.dart';
-import 'package:helpdeskfrontend/models/ticket.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
+import 'package:helpdeskfrontend/services/ticket_service.dart';
+import 'package:helpdeskfrontend/widgets/Header.dart';
+import 'package:helpdeskfrontend/widgets/NotificationScreen.dart';
 import 'package:helpdeskfrontend/widgets/navbar_client.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
-import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
+import 'package:helpdeskfrontend/provider/notification_provider.dart';
+import 'package:helpdeskfrontend/services/socket_service.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:helpdeskfrontend/services/socket_service.dart'; // Import SocketService
 
 class TicketsScreen extends StatefulWidget {
   const TicketsScreen({Key? key}) : super(key: key);
@@ -27,12 +29,17 @@ class _TicketsScreenState extends State<TicketsScreen> {
   final TextEditingController _searchController = TextEditingController();
   final AuthService _authService = AuthService();
   String? _selectedTypeFilter;
-  late SocketService _socketService; // SocketService instance
+  late SocketService _socketService;
   bool _isSocketConnected = false;
+  bool _isInitialized = false;
+  final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
 
   @override
   void initState() {
     super.initState();
+    print('TicketsScreen: initState called');
+    _socketService = SocketService();
     _initializeSocketService();
     _loadInitialData();
     _searchController.addListener(_filterTickets);
@@ -40,61 +47,118 @@ class _TicketsScreenState extends State<TicketsScreen> {
 
   @override
   void dispose() {
-    _socketService.disconnect(); // Disconnect socket on dispose
+    print('TicketsScreen: dispose called');
+    _searchController.removeListener(_filterTickets);
     _searchController.dispose();
+    _socketService.disconnect();
     super.dispose();
   }
 
+  void _handleNotification(Map<String, dynamic> data) {
+    print("TicketsScreen: Received notification: $data");
+    final notificationProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+    notificationProvider.addNotification(data);
+    print(
+        "TicketsScreen: Added notification, unreadCount: ${notificationProvider.unreadCount}");
+    if (!mounted) return;
+    if (data['type'] == 'chat_message') {
+      _scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 300),
+            child: Text(
+              'New message in ticket ${data['ticketId']}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          action: SnackBarAction(
+            label: 'View',
+            onPressed: () async {
+              try {
+                final ticket =
+                    await _ticketsFuture.then((tickets) => tickets.firstWhere(
+                          (ticket) => ticket.id == data['ticketId'],
+                          orElse: () => throw Exception('Ticket not found'),
+                        ));
+                _navigateToTicketDetail(ticket);
+              } catch (e) {
+                if (mounted) {
+                  _scaffoldMessengerKey.currentState?.showSnackBar(
+                    SnackBar(
+                      content: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 300),
+                        child: Text(
+                          'Error: $e',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+              }
+            },
+          ),
+        ),
+      );
+    }
+  }
+
   void _initializeSocketService() async {
+    if (_isInitialized) {
+      print('TicketsScreen: Already initialized, skipping');
+      return;
+    }
+    _isInitialized = true;
+
     try {
       final token = await _authService.getToken();
       final userId = await _authService.getCurrentUserId();
       if (token != null && userId != null) {
-        _socketService = SocketService();
+        print(
+            'TicketsScreen: Initializing socket, token: $token, userId: $userId');
         _socketService.initialize(
           userId: userId,
-          onNotification: (data) {
-            print("Received notification: $data");
-            if (data['type'] == 'chat_message') {
-              // Show a snackbar for new chat messages
-              ScaffoldMessenger.of(context).showSnackBar(
+          onNotification: _handleNotification,
+        );
+        _socketService.onConnectionStatus = (isConnected) {
+          print('TicketsScreen: Socket connection status: $isConnected');
+          if (mounted) {
+            setState(() {
+              _isSocketConnected = isConnected;
+            });
+            if (!isConnected) {
+              _scaffoldMessengerKey.currentState?.showSnackBar(
                 SnackBar(
-                  content: Text('New message in ticket ${data['ticketId']}'),
-                  action: SnackBarAction(
-                    label: 'View',
-                    onPressed: () {
-                      // Navigate to the ticket's chat screen
-                      _navigateToTicketDetail(
-                        _ticketsFuture.then((tickets) => tickets.firstWhere(
-                              (ticket) => ticket.id == data['ticketId'],
-                              orElse: () => throw Exception('Ticket not found'),
-                            )) as Ticket,
-                      );
-                    },
+                  content: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: const Text('Socket disconnected. Reconnecting...'),
                   ),
                 ),
               );
             }
-            _refreshTickets(); // Refresh tickets for any notification
-          },
-        );
-        _socketService.onConnectionStatus = (isConnected) {
-          setState(() {
-            _isSocketConnected = isConnected;
-          });
-          if (!isConnected) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Socket disconnected. Reconnecting...')),
-            );
           }
         };
+        await Future.delayed(Duration.zero);
         _socketService.connect(token);
+      } else {
+        print(
+            'TicketsScreen: Authentication failed, token: $token, userId: $userId');
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Authentication failed. Please log in again.';
+          });
+        }
       }
     } catch (e) {
-      print("Error initializing socket: $e");
-      setState(() {
-        _errorMessage = 'Failed to initialize real-time updates.';
-      });
+      print('TicketsScreen: Error initializing socket: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to initialize real-time updates.';
+        });
+      }
     }
   }
 
@@ -154,7 +218,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
   Future<void> _navigateToCreateTicket() async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => CreateTicketPage()),
+      MaterialPageRoute(builder: (context) => const CreateTicketPage()),
     );
     if (result == true) {
       await _refreshTickets();
@@ -182,14 +246,23 @@ class _TicketsScreenState extends State<TicketsScreen> {
             ),
           ),
         );
+        Provider.of<NotificationProvider>(context, listen: false)
+            .markAllAsReadForTicket(ticket.id);
       }
     } catch (e) {
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
+        _scaffoldMessengerKey.currentState?.showSnackBar(
           SnackBar(
-            content: Text('Error navigating to ticket: $e'),
-            duration: Duration(seconds: 6),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: Text(
+                'Error navigating to ticket: $e',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            duration: const Duration(seconds: 6),
           ),
         );
       }
@@ -202,69 +275,41 @@ class _TicketsScreenState extends State<TicketsScreen> {
     final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
     return Scaffold(
+      key: _scaffoldMessengerKey,
       extendBodyBehindAppBar: true,
+      appBar: AppHeader(
+        title: 'My Tickets',
+        actions: [],
+      ),
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: isDarkMode
-                ? [Color(0xFF141218), Color(0xFF242E3E)]
-                : [Color(0xFF628FF6).withOpacity(0.8), Color(0xFFF7F9F5)],
-            stops: [0.5, 1.0],
+                ? [const Color(0xFF141218), const Color(0xFF242E3E)]
+                : [
+                    const Color(0xFF628FF6).withOpacity(0.8),
+                    const Color(0xFFF7F9F5)
+                  ],
+            stops: const [0.5, 1.0],
           ),
         ),
         child: SafeArea(
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16.0, vertical: 12.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.assignment, color: Colors.white, size: 28),
-                        SizedBox(width: 8),
-                        Text(
-                          'My Tickets',
-                          style: GoogleFonts.poppins(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Icon(
-                          _isSocketConnected
-                              ? Icons.cloud_done
-                              : Icons.cloud_off,
-                          color: _isSocketConnected ? Colors.green : Colors.red,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-                    CircleAvatar(
-                      backgroundColor: Colors.orange.withOpacity(0.2),
-                      radius: 20,
-                      child: ThemeToggleButton(),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isDarkMode ? Color(0xFF3A4352) : Colors.white,
+                    color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.15),
                         blurRadius: 10,
-                        offset: Offset(0, 4),
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -278,7 +323,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
                       prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
-                              icon: Icon(Icons.clear, color: Colors.orange),
+                              icon:
+                                  const Icon(Icons.clear, color: Colors.orange),
                               onPressed: () =>
                                   setState(() => _searchController.clear()),
                             )
@@ -287,8 +333,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
                         borderRadius: BorderRadius.circular(30),
                         borderSide: BorderSide.none,
                       ),
-                      contentPadding:
-                          EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 18),
                     ),
                     style: TextStyle(
                         color: isDarkMode ? Colors.white : Colors.black),
@@ -298,38 +344,51 @@ class _TicketsScreenState extends State<TicketsScreen> {
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildTypeFilterChip(context,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      _buildTypeFilterChip(
+                        context,
                         type: null,
                         label: 'All',
                         icon: Icons.all_inclusive,
-                        isSelected: _selectedTypeFilter == null),
-                    _buildTypeFilterChip(context,
+                        isSelected: _selectedTypeFilter == null,
+                      ),
+                      const SizedBox(width: 8),
+                      _buildTypeFilterChip(
+                        context,
                         type: 'service',
                         label: 'Service',
                         icon: Icons.handyman,
-                        isSelected: _selectedTypeFilter == 'service'),
-                    _buildTypeFilterChip(context,
+                        isSelected: _selectedTypeFilter == 'service',
+                      ),
+                      const SizedBox(width: 8),
+                      _buildTypeFilterChip(
+                        context,
                         type: 'equipment',
                         label: 'Equipment',
                         icon: Icons.computer,
-                        isSelected: _selectedTypeFilter == 'equipment'),
-                  ],
+                        isSelected: _selectedTypeFilter == 'equipment',
+                      ),
+                    ],
+                  ),
                 ),
               ),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isDarkMode ? Color(0xFF242E3E) : Color(0xFFf7f9f5),
+                    color: isDarkMode
+                        ? const Color(0xFF242E3E)
+                        : const Color(0xFFF7F9F5),
                     borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(20)),
+                        const BorderRadius.vertical(top: Radius.circular(20)),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
                         blurRadius: 10,
-                        offset: Offset(0, -2),
+                        offset: const Offset(0, -2),
                       ),
                     ],
                   ),
@@ -342,8 +401,9 @@ class _TicketsScreenState extends State<TicketsScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _navigateToCreateTicket,
-        label: Text('Create Ticket', style: TextStyle(color: Colors.white)),
-        icon: Icon(Icons.add, color: Colors.white),
+        label:
+            const Text('Create Ticket', style: TextStyle(color: Colors.white)),
+        icon: const Icon(Icons.add, color: Colors.white),
         backgroundColor: Colors.orange,
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -368,8 +428,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
     return GestureDetector(
       onTap: () => _filterByType(type),
       child: AnimatedContainer(
-        duration: Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected
               ? (type == 'service'
@@ -377,26 +437,28 @@ class _TicketsScreenState extends State<TicketsScreen> {
                   : type == 'equipment'
                       ? Colors.blue
                       : Colors.grey)
-              : (isDarkMode ? Color(0xFF3A4352) : Colors.white),
+              : (isDarkMode ? const Color(0xFF3A4352) : Colors.white),
           borderRadius: BorderRadius.circular(50),
           boxShadow: isSelected
               ? [
                   BoxShadow(
                       color: Colors.black.withOpacity(0.2),
                       blurRadius: 6,
-                      offset: Offset(0, 2))
+                      offset: const Offset(0, 2))
                 ]
               : [],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon,
-                size: 20,
-                color: isSelected
-                    ? Colors.white
-                    : (isDarkMode ? Colors.white : Colors.black)),
-            SizedBox(width: 8),
+            Icon(
+              icon,
+              size: 20,
+              color: isSelected
+                  ? Colors.white
+                  : (isDarkMode ? Colors.white : Colors.black),
+            ),
+            const SizedBox(width: 8),
             Text(
               label,
               style: GoogleFonts.poppins(
@@ -448,9 +510,9 @@ class _TicketsScreenState extends State<TicketsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
+          const CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Colors.orange)),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             'Loading tickets...',
             style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[600]),
@@ -468,8 +530,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 60, color: Colors.red),
-          SizedBox(height: 16),
+          const Icon(Icons.error_outline, size: 60, color: Colors.red),
+          const SizedBox(height: 16),
           Text(
             'Loading Error',
             style: GoogleFonts.poppins(
@@ -478,28 +540,33 @@ class _TicketsScreenState extends State<TicketsScreen> {
               color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: Text(
-              error,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: Text(
+                error,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _refreshTickets,
-            icon: Icon(Icons.refresh, size: 20),
-            label: Text('Try Again'),
+            icon: const Icon(Icons.refresh, size: 20),
+            label: const Text('Try Again'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
         ],
@@ -515,8 +582,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.person_off, size: 60, color: Colors.red),
-          SizedBox(height: 16),
+          const Icon(Icons.person_off, size: 60, color: Colors.red),
+          const SizedBox(height: 16),
           Text(
             'Authentication Issue',
             style: GoogleFonts.poppins(
@@ -525,7 +592,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
               color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             _errorMessage ?? 'Please try again later',
             style: GoogleFonts.poppins(
@@ -533,16 +600,16 @@ class _TicketsScreenState extends State<TicketsScreen> {
               color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
             ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           ElevatedButton.icon(
-            onPressed: _refreshTickets,
-            icon: Icon(Icons.refresh, size: 20),
-            label: Text('Retry'),
+            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+            icon: const Icon(Icons.login, size: 20),
+            label: const Text('Login'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
         ],
@@ -563,7 +630,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
             size: 80,
             color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             'No Tickets Yet',
             style: GoogleFonts.poppins(
@@ -572,7 +639,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
               color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'Create your first ticket now!',
             style: GoogleFonts.poppins(
@@ -580,16 +647,16 @@ class _TicketsScreenState extends State<TicketsScreen> {
               color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
             ),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _navigateToCreateTicket,
-            icon: Icon(Icons.add, size: 20),
-            label: Text('Create Ticket'),
+            icon: const Icon(Icons.add, size: 20),
+            label: const Text('Create Ticket'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20)),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
           ),
         ],
@@ -641,7 +708,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        color: isDarkMode ? Color(0xFF3A4352) : Colors.white,
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(
@@ -650,25 +717,30 @@ class _TicketsScreenState extends State<TicketsScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          _getStatusColor(ticket.status),
-                          _getStatusColor(ticket.status).withOpacity(0.7)
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                  Flexible(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            _getStatusColor(ticket.status),
+                            _getStatusColor(ticket.status).withOpacity(0.7)
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _translateStatus(ticket.status),
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                      child: Text(
+                        _translateStatus(ticket.status),
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),
@@ -683,7 +755,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                   ),
                 ],
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 ticket.title,
                 style: GoogleFonts.poppins(
@@ -694,7 +766,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Expanded(
                 child: Text(
                   ticket.description,
@@ -706,7 +778,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 'Created: ${_formatDate(ticket.creationDate)}',
                 style: GoogleFonts.poppins(
