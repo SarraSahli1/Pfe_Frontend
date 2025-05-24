@@ -10,9 +10,11 @@ import 'package:helpdeskfrontend/widgets/NotificationScreen.dart';
 import 'package:helpdeskfrontend/widgets/navbar_client.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
 import 'package:helpdeskfrontend/provider/notification_provider.dart';
+import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 import 'package:helpdeskfrontend/services/socket_service.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:badges/badges.dart' as badges;
 
 class TicketsScreen extends StatefulWidget {
   const TicketsScreen({Key? key}) : super(key: key);
@@ -279,7 +281,72 @@ class _TicketsScreenState extends State<TicketsScreen> {
       extendBodyBehindAppBar: true,
       appBar: AppHeader(
         title: 'My Tickets',
-        actions: [],
+        actions: [
+          Consumer<NotificationProvider>(
+            builder: (context, notificationProvider, _) {
+              print(
+                  'AppHeader badge rebuild, unreadCount: ${notificationProvider.unreadCount}, '
+                  'provider instance: ${notificationProvider.hashCode}');
+              return badges.Badge(
+                key: const ValueKey('notification_badge'),
+                showBadge: notificationProvider.unreadCount > 0,
+                badgeContent: Text(
+                  '${notificationProvider.unreadCount}',
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 10,
+                  ),
+                ),
+                badgeStyle: const badges.BadgeStyle(badgeColor: Colors.red),
+                child: IconButton(
+                  key: const ValueKey('notification_icon'),
+                  icon: Icon(
+                    Icons.notifications,
+                    color: notificationProvider.unreadCount > 0
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.7),
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    print(
+                        'Notification icon tapped, unreadCount: ${notificationProvider.unreadCount}');
+                    if (notificationProvider.unreadCount > 0) {
+                      showGeneralDialog(
+                        context: context,
+                        barrierDismissible: true,
+                        barrierLabel: 'Notifications',
+                        pageBuilder: (context, _, __) => Center(
+                          child: NotificationCard(
+                            onClose: () => Navigator.of(context).pop(),
+                          ),
+                        ),
+                        barrierColor: Colors.black.withOpacity(0.5),
+                        transitionBuilder: (context, animation, __, child) {
+                          return ScaleTransition(
+                            scale: CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeInOut,
+                            ),
+                            child: child,
+                          );
+                        },
+                        transitionDuration: const Duration(milliseconds: 200),
+                      );
+                    }
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+                position: badges.BadgePosition.topEnd(top: -8, end: -8),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: ThemeToggleButton(),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
