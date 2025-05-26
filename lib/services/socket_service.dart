@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/services/config.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'package:jwt_decoder/jwt_decoder.dart'; // Ajout pour le décodage JWT
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class SocketService {
   static final SocketService _instance = SocketService._internal();
@@ -38,7 +38,6 @@ class SocketService {
       addNotificationListener(onNotification);
     }
 
-    // Vérification périodique de la connexion
     _connectionChecker = Timer.periodic(const Duration(minutes: 1), (_) {
       if (!_isConnected && !_isConnecting && _currentToken != null) {
         debugPrint('[SOCKET] Periodic connection check - reconnecting');
@@ -65,7 +64,6 @@ class SocketService {
     if (_isConnected || _isConnecting) return;
 
     try {
-      // Vérification du token JWT
       if (!JwtDecoder.isExpired(token)) {
         final decoded = JwtDecoder.decode(token);
         if (decoded['_id'] != userId) {
@@ -81,7 +79,7 @@ class SocketService {
       _currentToken = token;
       debugPrint('[SOCKET] Connecting with token: ${_obfuscateToken(token)}');
 
-      disconnect(); // Nettoyer toute connexion existante
+      disconnect();
 
       _socket = IO.io(
         Config.baseUrl,
@@ -147,21 +145,134 @@ class SocketService {
       }
     });
 
-    _socket!.on('ticket-update', (data) => _handleEvent('ticket-update', data));
-    _socket!.on('status-change', (data) => _handleEvent('status-change', data));
-    _socket!.on('notification', (data) => _handleEvent('notification', data));
-    _socket!.on('chat-message', (data) => _handleEvent('chat-message', data));
+    _socket!.on('ticket:update', (data) {
+      try {
+        debugPrint('[SOCKET] Ticket update received: $data');
+        final notification = {
+          'event': 'ticket-update',
+          'type': 'status-change',
+          'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
+          'message': {
+            '_id': data['_id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            'message':
+                data['message'] ?? 'Ticket status updated to ${data['status']}',
+            'status': data['status'],
+            'oldStatus': data['oldStatus'],
+            'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+          },
+        };
+        _handleEvent('ticket-update', notification);
+      } catch (e) {
+        debugPrint('[SOCKET] Ticket update processing error: $e');
+      }
+    });
+
+    _socket!.on('user:notification', (data) {
+      try {
+        debugPrint('[SOCKET] User notification received: $data');
+        final notification = {
+          'event': 'user-notification',
+          'type': 'status-change',
+          'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
+          'message': {
+            '_id': data['_id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            'message':
+                data['message'] ?? 'Ticket status updated to ${data['status']}',
+            'status': data['status'],
+            'oldStatus': data['oldStatus'],
+            'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+          },
+        };
+        _handleEvent('user-notification', notification);
+      } catch (e) {
+        debugPrint('[SOCKET] User notification processing error: $e');
+      }
+    });
+
+    _socket!.on('status-change', (data) {
+      try {
+        debugPrint('[SOCKET] Status change received: $data');
+        final notification = {
+          'event': 'status-change',
+          'type': 'status-change',
+          'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
+          'message': {
+            '_id': data['_id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            'message':
+                data['message'] ?? 'Ticket status updated to ${data['status']}',
+            'status': data['status'],
+            'oldStatus': data['oldStatus'],
+            'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+          },
+        };
+        _handleEvent('status-change', notification);
+      } catch (e) {
+        debugPrint('[SOCKET] Status change processing error: $e');
+      }
+    });
+
+    _socket!.on('notification', (data) {
+      try {
+        debugPrint('[SOCKET] Generic notification received: $data');
+        final notification = {
+          'event': 'notification',
+          'type': data['type'] ?? 'generic',
+          'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
+          'message': {
+            '_id': data['_id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            'message': data['message'] ?? 'Notification received',
+            'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+          },
+        };
+        _handleEvent('notification', notification);
+      } catch (e) {
+        debugPrint('[SOCKET] Notification processing error: $e');
+      }
+    });
+
+    _socket!.on('chat-message', (data) {
+      try {
+        debugPrint('[SOCKET] Chat message received: $data');
+        _handleEvent('chat-message', {
+          'event': 'chat-message',
+          'type': 'chat_message',
+          'ticketId': data['ticketId']?.toString(),
+          'message': {
+            '_id': data['_id']?.toString() ??
+                DateTime.now().millisecondsSinceEpoch.toString(),
+            'message': data['message'] ?? '',
+            'sender': data['sender'] ?? {},
+            'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+          },
+        });
+      } catch (e) {
+        debugPrint('[SOCKET] Chat message processing error: $e');
+      }
+    });
   }
 
   Map<String, dynamic> _parseNotificationData(dynamic data) {
     if (data is Map<String, dynamic>) {
       return {
         'event': 'new-chat-notification',
-        ...data,
+        'type': 'chat_message',
+        'ticketId': data['ticketId']?.toString(),
+        'message': {
+          '_id': data['_id']?.toString() ??
+              DateTime.now().millisecondsSinceEpoch.toString(),
+          'message': data['message'] ?? '',
+          'sender': data['sender'] ?? {},
+          'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+        },
       };
     } else if (data is String) {
       return {
         'event': 'new-chat-notification',
+        'type': 'chat_message',
         'data': jsonDecode(data),
       };
     }
@@ -170,6 +281,8 @@ class SocketService {
 
   void _handleEvent(String event, Map<String, dynamic> data) {
     debugPrint('[SOCKET] Handling $event with data: $data');
+    // Skip notifying listeners during disconnection for non-connection events
+    if (!_isConnected && event != 'connection_status') return;
     for (var listener in List.from(_notificationListeners)) {
       try {
         listener(data);
@@ -182,7 +295,9 @@ class SocketService {
   Future<void> subscribeToTicket(String ticketId) async {
     if (_socket?.connected != true) {
       debugPrint('[SOCKET] Not connected, queueing subscription to $ticketId');
-      _subscribedTickets.add(ticketId);
+      if (!_subscribedTickets.contains(ticketId)) {
+        _subscribedTickets.add(ticketId);
+      }
       return;
     }
 
@@ -196,7 +311,14 @@ class SocketService {
     _socket!.on('chat:$ticketId', (data) {
       _handleEvent('chat:$ticketId', {
         'ticketId': ticketId,
-        'data': data,
+        'type': 'chat_message',
+        'message': {
+          '_id': data['_id']?.toString() ??
+              DateTime.now().millisecondsSinceEpoch.toString(),
+          'message': data['message'] ?? '',
+          'sender': data['sender'] ?? {},
+          'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+        },
       });
     });
   }
@@ -249,12 +371,15 @@ class SocketService {
   void disconnect() {
     if (_socket != null) {
       debugPrint('[SOCKET] Disconnecting...');
+      _isConnected = false;
+      _isConnecting = false;
       _socket!.disconnect();
       _socket!.destroy();
       _socket = null;
-      _isConnected = false;
-      _isConnecting = false;
       _cancelReconnect();
+      if (onConnectionStatus != null) {
+        onConnectionStatus!(false);
+      }
     }
   }
 

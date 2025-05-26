@@ -52,6 +52,8 @@ class _TicketsScreenState extends State<TicketsScreen> {
     print('TicketsScreen: dispose called');
     _searchController.removeListener(_filterTickets);
     _searchController.dispose();
+    _socketService.removeNotificationListener(_handleNotification);
+    _socketService.onConnectionStatus = null;
     _socketService.disconnect();
     super.dispose();
   }
@@ -64,48 +66,56 @@ class _TicketsScreenState extends State<TicketsScreen> {
     print(
         "TicketsScreen: Added notification, unreadCount: ${notificationProvider.unreadCount}");
     if (!mounted) return;
-    if (data['type'] == 'chat_message') {
-      _scaffoldMessengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 300),
-            child: Text(
-              'New message in ticket ${data['ticketId']}',
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          action: SnackBarAction(
-            label: 'View',
-            onPressed: () async {
-              try {
-                final ticket =
-                    await _ticketsFuture.then((tickets) => tickets.firstWhere(
-                          (ticket) => ticket.id == data['ticketId'],
-                          orElse: () => throw Exception('Ticket not found'),
-                        ));
-                _navigateToTicketDetail(ticket);
-              } catch (e) {
-                if (mounted) {
-                  _scaffoldMessengerKey.currentState?.showSnackBar(
-                    SnackBar(
-                      content: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 300),
-                        child: Text(
-                          'Error: $e',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              }
-            },
+
+    String message;
+    if (data['type'] == 'status-change') {
+      message = data['message']?['message'] ?? 'Ticket status updated';
+    } else if (data['type'] == 'chat_message') {
+      message = 'New message in ticket ${data['ticketId']}';
+    } else {
+      return;
+    }
+
+    _scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 300),
+          child: Text(
+            message,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-      );
-    }
+        action: SnackBarAction(
+          label: 'View',
+          onPressed: () async {
+            try {
+              final ticket =
+                  await _ticketsFuture.then((tickets) => tickets.firstWhere(
+                        (ticket) => ticket.id == data['ticketId'],
+                        orElse: () => throw Exception('Ticket not found'),
+                      ));
+              _navigateToTicketDetail(ticket);
+            } catch (e) {
+              if (mounted) {
+                _scaffoldMessengerKey.currentState?.showSnackBar(
+                  SnackBar(
+                    content: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 300),
+                      child: Text(
+                        'Error: $e',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                );
+              }
+            }
+          },
+        ),
+      ),
+    );
   }
 
   void _initializeSocketService() async {
@@ -120,7 +130,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
       final userId = await _authService.getCurrentUserId();
       if (token != null && userId != null) {
         print(
-            'TicketsScreen: Initializing socket, token: $token, userId: $userId');
+            'TicketsScreen: Initializing socket, token: ${token.substring(0, 10)}..., userId: $userId');
         _socketService.initialize(
           userId: userId,
           onNotification: _handleNotification,
@@ -143,8 +153,7 @@ class _TicketsScreenState extends State<TicketsScreen> {
             }
           }
         };
-        await Future.delayed(Duration.zero);
-        _socketService.connect(token);
+        await _socketService.connect(token);
       } else {
         print(
             'TicketsScreen: Authentication failed, token: $token, userId: $userId');
@@ -167,49 +176,67 @@ class _TicketsScreenState extends State<TicketsScreen> {
   Future<void> _loadInitialData() async {
     try {
       if (await _authService.isLoggedIn()) {
+        await Provider.of<NotificationProvider>(context, listen: false)
+            .loadInitialNotifications(await _authService.getToken() ?? '');
         await _loadTickets();
       } else {
-        setState(() {
-          _errorMessage = 'User not authenticated. Please try again later.';
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'User not authenticated. Please try again later.';
+          });
+        }
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+        });
+      }
     }
   }
 
   Future<void> _loadTickets() async {
     try {
-      setState(() {
-        _isRefreshing = true;
-        _errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          _isRefreshing = true;
+          _errorMessage = null;
+        });
+      }
       final tickets = await TicketService.getTicketsByClient();
-      setState(() {
-        _ticketsFuture = Future.value(tickets);
-      });
+      if (mounted) {
+        setState(() {
+          _ticketsFuture = Future.value(tickets);
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-        _ticketsFuture = Future.value([]);
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+          _ticketsFuture = Future.value([]);
+        });
+      }
     } finally {
-      setState(() {
-        _isRefreshing = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
   void _filterTickets() {
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _filterByType(String? type) {
-    setState(() {
-      _selectedTypeFilter = type;
-    });
+    if (mounted) {
+      setState(() {
+        _selectedTypeFilter = type;
+      });
+    }
   }
 
   Future<void> _refreshTickets() async {
@@ -310,29 +337,27 @@ class _TicketsScreenState extends State<TicketsScreen> {
                   onPressed: () {
                     print(
                         'Notification icon tapped, unreadCount: ${notificationProvider.unreadCount}');
-                    if (notificationProvider.unreadCount > 0) {
-                      showGeneralDialog(
-                        context: context,
-                        barrierDismissible: true,
-                        barrierLabel: 'Notifications',
-                        pageBuilder: (context, _, __) => Center(
-                          child: NotificationCard(
-                            onClose: () => Navigator.of(context).pop(),
-                          ),
+                    showGeneralDialog(
+                      context: context,
+                      barrierDismissible: true,
+                      barrierLabel: 'Notifications',
+                      pageBuilder: (context, _, __) => Center(
+                        child: NotificationCard(
+                          onClose: () => Navigator.of(context).pop(),
                         ),
-                        barrierColor: Colors.black.withOpacity(0.5),
-                        transitionBuilder: (context, animation, __, child) {
-                          return ScaleTransition(
-                            scale: CurvedAnimation(
-                              parent: animation,
-                              curve: Curves.easeInOut,
-                            ),
-                            child: child,
-                          );
-                        },
-                        transitionDuration: const Duration(milliseconds: 200),
-                      );
-                    }
+                      ),
+                      barrierColor: Colors.black.withOpacity(0.5),
+                      transitionBuilder: (context, animation, __, child) {
+                        return ScaleTransition(
+                          scale: CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeInOut,
+                          ),
+                          child: child,
+                        );
+                      },
+                      transitionDuration: const Duration(milliseconds: 200),
+                    );
                   },
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -392,8 +417,10 @@ class _TicketsScreenState extends State<TicketsScreen> {
                           ? IconButton(
                               icon:
                                   const Icon(Icons.clear, color: Colors.orange),
-                              onPressed: () =>
-                                  setState(() => _searchController.clear()),
+                              onPressed: () {
+                                _searchController.clear();
+                                _filterTickets();
+                              },
                             )
                           : null,
                       border: OutlineInputBorder(
@@ -477,7 +504,11 @@ class _TicketsScreenState extends State<TicketsScreen> {
       ),
       bottomNavigationBar: NavbarClient(
         currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
+        onTap: (index) {
+          if (mounted) {
+            setState(() => _selectedIndex = index);
+          }
+        },
       ),
     );
   }

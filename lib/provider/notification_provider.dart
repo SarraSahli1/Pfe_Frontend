@@ -1,71 +1,78 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:helpdeskfrontend/services/config.dart';
 
-class NotificationProvider with ChangeNotifier {
-  final List<Map<String, dynamic>> _notifications = [];
-  final Set<String> _readIds = {};
+class NotificationProvider extends ChangeNotifier {
+  List<Map<String, dynamic>> _notifications = [];
+  int _unreadCount = 0;
 
-  List<Map<String, dynamic>> get unreadNotifications => _notifications
-      .where((n) => !_readIds.contains(n['message']?['_id']))
-      .toList();
-
-  List<Map<String, dynamic>> get allNotifications => _notifications;
-
-  int get unreadCount => unreadNotifications.length;
+  List<Map<String, dynamic>> get notifications => _notifications;
+  int get unreadCount => _unreadCount;
 
   void addNotification(Map<String, dynamic> notification) {
     final messageId = notification['message']?['_id'];
+    debugPrint('[NotificationProvider] Adding notification: $notification');
     if (messageId != null &&
         !_notifications.any((n) => n['message']?['_id'] == messageId)) {
       _notifications.add(notification);
+      _unreadCount++;
+      debugPrint(
+          '[NotificationProvider] Notification added, unreadCount: $_unreadCount');
       notifyListeners();
+    } else {
+      debugPrint(
+          '[NotificationProvider] Duplicate or invalid notification skipped');
     }
   }
 
   void markAsRead(String messageId) {
-    if (!_readIds.contains(messageId)) {
-      _readIds.add(messageId);
-      notifyListeners();
-    }
-  }
-
-  void markAllAsRead() {
-    bool changed = false;
-    for (final n in _notifications) {
-      final messageId = n['message']?['_id'];
-      if (messageId != null && !_readIds.contains(messageId)) {
-        _readIds.add(messageId);
-        changed = true;
-      }
-    }
-    if (changed) {
+    final index =
+        _notifications.indexWhere((n) => n['message']?['_id'] == messageId);
+    if (index != -1) {
+      _unreadCount = (_unreadCount - 1).clamp(0, _notifications.length);
+      debugPrint(
+          '[NotificationProvider] Marked as read, unreadCount: $_unreadCount');
       notifyListeners();
     }
   }
 
   void markAllAsReadForTicket(String ticketId) {
-    bool changed = false;
-    for (final n in _notifications) {
-      if (n['ticketId'] == ticketId && n['message']?['_id'] != null) {
-        final messageId = n['message']['_id'];
-        if (!_readIds.contains(messageId)) {
-          _readIds.add(messageId);
-          changed = true;
-        }
-      }
-    }
-    if (changed) {
+    final relatedNotifications =
+        _notifications.where((n) => n['ticketId'] == ticketId).toList();
+    if (relatedNotifications.isNotEmpty) {
+      _unreadCount = (_unreadCount - relatedNotifications.length)
+          .clamp(0, _notifications.length);
+      debugPrint(
+          '[NotificationProvider] Marked all for ticket $ticketId as read, unreadCount: $_unreadCount');
       notifyListeners();
     }
   }
 
-  void removeNotification(String messageId) {
-    _notifications.removeWhere((n) => n['message']?['_id'] == messageId);
-    _readIds.remove(messageId);
+  void clearNotifications() {
+    _notifications.clear();
+    _unreadCount = 0;
+    debugPrint('[NotificationProvider] Cleared notifications');
     notifyListeners();
   }
 
-  void clearReadNotifications() {
-    _notifications.removeWhere((n) => _readIds.contains(n['message']?['_id']));
-    notifyListeners();
+  Future<void> loadInitialNotifications(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${Config.baseUrl}/api/notifications/unread'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode == 200) {
+        final List<dynamic> notifications = jsonDecode(response.body);
+        for (var notification in notifications) {
+          addNotification(notification);
+        }
+        debugPrint(
+            '[NotificationProvider] Loaded ${notifications.length} initial notifications');
+      }
+    } catch (e) {
+      debugPrint(
+          '[NotificationProvider] Failed to load initial notifications: $e');
+    }
   }
 }

@@ -1,107 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:helpdeskfrontend/models/ticket.dart';
+import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/notification_provider.dart';
-import 'package:helpdeskfrontend/screens/Technicien_Screens/ticket_detail.dart';
+import 'package:helpdeskfrontend/screens/Client_Screens/Tickets/ticket_detail_screen.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
 import 'package:helpdeskfrontend/services/ticket_service.dart';
-import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class NotificationCard extends StatelessWidget {
   final VoidCallback onClose;
 
-  const NotificationCard({super.key, required this.onClose});
+  const NotificationCard({Key? key, required this.onClose}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final notificationProvider = Provider.of<NotificationProvider>(context);
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final notificationProvider = Provider.of<NotificationProvider>(context);
+    debugPrint(
+        '[NotificationCard] Showing ${notificationProvider.notifications.length} notifications');
 
-    return Card(
-      elevation: 8,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      color: isDarkMode ? Color(0xFF242E3E) : Colors.white,
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      backgroundColor: isDarkMode ? const Color(0xFF242E3E) : Colors.white,
       child: Container(
-        constraints: BoxConstraints(
-          maxHeight: 300,
-          maxWidth: 300,
-        ),
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
+        padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Notifications',
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: isDarkMode ? Colors.white : Colors.black87,
-                    ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Notifications',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: isDarkMode ? Colors.white : Colors.black87,
                   ),
-                  Row(
-                    children: [
-                      if (notificationProvider.unreadCount > 0)
-                        GestureDetector(
-                          onTap: () {
-                            notificationProvider.markAllAsRead();
-                          },
-                          child: Text(
-                            'Mark All',
-                            style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.blue,
-                            ),
-                          ),
-                        ),
-                      SizedBox(width: 8),
-                      IconButton(
-                        icon: Icon(
-                          Icons.close,
-                          size: 20,
-                          color:
-                              isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                        onPressed: onClose,
-                        padding: EdgeInsets.zero,
-                        constraints: BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: onClose,
+                  color: isDarkMode ? Colors.white70 : Colors.black54,
+                ),
+              ],
             ),
-            Divider(height: 1, color: Colors.grey[300]),
-            Expanded(
-              child: notificationProvider.unreadCount == 0
+            const Divider(),
+            Flexible(
+              child: notificationProvider.notifications.isEmpty
                   ? Center(
                       child: Text(
-                        'No unread notifications',
+                        'No notifications',
                         style: GoogleFonts.poppins(
                           fontSize: 14,
-                          color:
-                              isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                          color: isDarkMode ? Colors.white70 : Colors.black54,
                         ),
                       ),
                     )
                   : ListView.builder(
-                      padding: EdgeInsets.zero,
-                      itemCount:
-                          notificationProvider.unreadNotifications.length,
+                      shrinkWrap: true,
+                      itemCount: notificationProvider.notifications.length,
                       itemBuilder: (context, index) {
                         final notification =
-                            notificationProvider.unreadNotifications[index];
+                            notificationProvider.notifications[index];
                         final messageId = notification['message']?['_id'] ?? '';
                         final ticketId = notification['ticketId'] ?? 'Unknown';
-                        final senderName = notification['message']?['sender']
-                                ?['firstName'] ??
-                            'Unknown';
-                        final messageText =
-                            notification['message']?['message'] ?? '';
+                        final type = notification['type'] ?? 'unknown';
                         final createdAt =
                             notification['message']?['createdAt'] != null
                                 ? DateTime.parse(
@@ -109,17 +73,36 @@ class NotificationCard extends StatelessWidget {
                                     .toLocal()
                                 : DateTime.now();
 
+                        String title, subtitle;
+                        IconData icon;
+
+                        if (type == 'status-change') {
+                          title = 'Ticket $ticketId Status Update';
+                          subtitle = notification['message']?['message'] ??
+                              'Status changed to ${notification['message']?['status']}';
+                          icon = Icons.update;
+                        } else if (type == 'chat_message') {
+                          final senderName = notification['message']?['sender']
+                                  ?['firstName'] ??
+                              'Unknown';
+                          title = 'Ticket $ticketId';
+                          subtitle =
+                              '$senderName: ${notification['message']?['message'] ?? ''}';
+                          icon = Icons.message;
+                        } else {
+                          title = 'Notification';
+                          subtitle = notification['message']?['message'] ??
+                              'Unknown notification';
+                          icon = Icons.notifications;
+                        }
+
                         return ListTile(
                           dense: true,
-                          contentPadding:
-                              EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          leading: Icon(
-                            Icons.message,
-                            color: Colors.blue,
-                            size: 20,
-                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          leading: Icon(icon, color: Colors.blue, size: 20),
                           title: Text(
-                            'Ticket $ticketId',
+                            title,
                             style: GoogleFonts.poppins(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -127,7 +110,7 @@ class NotificationCard extends StatelessWidget {
                             ),
                           ),
                           subtitle: Text(
-                            '$senderName: $messageText',
+                            subtitle,
                             style: GoogleFonts.poppins(
                               fontSize: 12,
                               color:
@@ -154,9 +137,7 @@ class NotificationCard extends StatelessWidget {
                               if (token == null || userId == null) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Please log in again.'),
-                                    duration: Duration(seconds: 2),
-                                  ),
+                                      content: Text('Please log in again.')),
                                 );
                                 return;
                               }
@@ -164,18 +145,8 @@ class NotificationCard extends StatelessWidget {
                               final ticket =
                                   await TicketService.getTicketDetails(
                                       ticketId);
-                              if (ticket == null) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Ticket not found.'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                                return;
-                              }
-
                               notificationProvider.markAsRead(messageId);
-                              onClose();
+                              Navigator.of(context).pop();
 
                               Navigator.push(
                                 context,
@@ -190,9 +161,7 @@ class NotificationCard extends StatelessWidget {
                             } catch (e) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Error: ${e.toString()}'),
-                                  duration: const Duration(seconds: 2),
-                                ),
+                                    content: Text('Error: ${e.toString()}')),
                               );
                             }
                           },
