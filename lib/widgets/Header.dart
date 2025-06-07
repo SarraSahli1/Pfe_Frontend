@@ -17,28 +17,6 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
     this.actions,
   });
 
-  void _showNotificationCard(BuildContext context, Offset position) {
-    final overlay = Overlay.of(context);
-    late OverlayEntry overlayEntry;
-
-    overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        top: position.dy + 10,
-        right: 10,
-        child: Material(
-          color: Colors.transparent,
-          child: NotificationCard(
-            onClose: () {
-              overlayEntry.remove();
-            },
-          ),
-        ),
-      ),
-    );
-
-    overlay.insert(overlayEntry);
-  }
-
   @override
   Widget build(BuildContext context) {
     final notificationProvider = Provider.of<NotificationProvider>(context);
@@ -56,14 +34,16 @@ class AppHeader extends StatelessWidget implements PreferredSizeWidget {
         ),
       ),
       actions: [
-        GestureDetector(
-          onTapDown: (details) {
-            if (notificationProvider.unreadCount > 0) {
-              final position = details.globalPosition;
-              _showNotificationCard(context, position);
-            }
+        IconButton(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NotificationScreen(),
+              ),
+            );
           },
-          child: badges.Badge(
+          icon: badges.Badge(
             showBadge: notificationProvider.unreadCount > 0,
             badgeContent: Text(
               '${notificationProvider.unreadCount}',

@@ -6,13 +6,39 @@ import 'package:helpdeskfrontend/services/config.dart';
 class NotificationProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _notifications = [];
   int _unreadCount = 0;
+  String? _currentUserId; // Track current user ID
 
   List<Map<String, dynamic>> get notifications => _notifications;
   int get unreadCount => _unreadCount;
 
-  void addNotification(Map<String, dynamic> notification) {
+  void setCurrentUserId(String userId) {
+    _currentUserId = userId;
+    debugPrint(
+        '[NotificationProvider] Current user ID set to: $_currentUserId');
+  }
+
+  void addNotification(Map<String, dynamic> notification,
+      {String? activeTicketId}) {
     final messageId = notification['message']?['_id'];
-    debugPrint('[NotificationProvider] Adding notification: $notification');
+    final ticketId = notification['ticketId'];
+    final senderId = notification['message']?['sender']?['_id']?.toString();
+    debugPrint(
+        '[NotificationProvider] Adding notification: $notification, activeTicketId: $activeTicketId');
+
+    // Skip if user is viewing the ChatScreen for this ticket
+    if (ticketId != null && ticketId == activeTicketId) {
+      debugPrint(
+          '[NotificationProvider] Skipping notification for active chat: $ticketId');
+      return;
+    }
+
+    // Skip if the notification is for the sender's own message
+    if (senderId != null && senderId == _currentUserId) {
+      debugPrint(
+          '[NotificationProvider] Skipping notification for own message: $messageId');
+      return;
+    }
+
     if (messageId != null &&
         !_notifications.any((n) => n['message']?['_id'] == messageId)) {
       _notifications.add(notification);
@@ -30,6 +56,7 @@ class NotificationProvider extends ChangeNotifier {
     final index =
         _notifications.indexWhere((n) => n['message']?['_id'] == messageId);
     if (index != -1) {
+      _notifications.removeAt(index);
       _unreadCount = (_unreadCount - 1).clamp(0, _notifications.length);
       debugPrint(
           '[NotificationProvider] Marked as read, unreadCount: $_unreadCount');
@@ -41,6 +68,7 @@ class NotificationProvider extends ChangeNotifier {
     final relatedNotifications =
         _notifications.where((n) => n['ticketId'] == ticketId).toList();
     if (relatedNotifications.isNotEmpty) {
+      _notifications.removeWhere((n) => n['ticketId'] == ticketId);
       _unreadCount = (_unreadCount - relatedNotifications.length)
           .clamp(0, _notifications.length);
       debugPrint(

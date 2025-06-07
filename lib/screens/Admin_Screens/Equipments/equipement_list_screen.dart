@@ -269,8 +269,8 @@ class _EquipmentListPageState extends State<EquipmentListPage> {
                   ),
       ),
       bottomNavigationBar: NavbarAdmin(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
+        currentIndex: 2, // Index pour la page Equipements
+        context: context,
       ),
     );
   }

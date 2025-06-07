@@ -11,6 +11,8 @@ import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/notification_provider.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 
 class ChatScreen extends StatefulWidget {
   final String ticketId;
@@ -37,17 +39,22 @@ class _ChatScreenState extends State<ChatScreen> {
   List<XFile> _selectedFiles = [];
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _picker = ImagePicker();
+  DateTime _lastScrollTime = DateTime.now();
+  final Duration _scrollDebounceDuration = const Duration(milliseconds: 100);
 
   @override
   void initState() {
     super.initState();
     _socketService = SocketService();
+    _socketService.initialize(userId: widget.currentUserId);
     if (!_socketService.isConnected) {
       _socketService.connect(widget.token);
     }
+    _socketService.setActiveTicketId(widget.ticketId); // Set active ticketId
+    _socketService.subscribeToTicket(widget.ticketId);
 
     _socketService.onConnectionStatus = (isConnected) {
-      if (!isConnected) {
+      if (!isConnected && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Chat server disconnected')),
         );
@@ -57,29 +64,72 @@ class _ChatScreenState extends State<ChatScreen> {
     _socketService.addNotificationListener(_handleSocketMessage);
     _loadChat();
 
-    // Mark all messages as read when chat opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final notificationProvider =
-          Provider.of<NotificationProvider>(context, listen: false);
-      notificationProvider.markAllAsReadForTicket(widget.ticketId);
+      if (mounted) {
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider.markAllAsReadForTicket(widget.ticketId);
+      }
     });
   }
 
   void _handleSocketMessage(Map<String, dynamic> data) {
-    if (data['ticketId'] == widget.ticketId) {
-      final message = ChatMessage.fromJson(data['message']);
-      _handleNewMessage(message);
+    debugPrint('[ChatScreen] Received message data: $data');
+    if (data['ticketId'] != widget.ticketId || !mounted) {
+      debugPrint(
+          '[ChatScreen] Ignoring message for ticket ${data['ticketId']} or screen not mounted');
+      return;
+    }
 
-      // Mark incoming message as read
-      final notificationProvider =
-          Provider.of<NotificationProvider>(context, listen: false);
-      notificationProvider.markAsRead(message.id);
+    // Skip new-chat-notification for active ticket
+    if (data['event'] == 'new-chat-notification') {
+      debugPrint(
+          '[ChatScreen] Skipping new-chat-notification for active ticket: ${data['ticketId']}');
+      return;
+    }
+
+    try {
+      final messageData = data['message'];
+      if (messageData == null || messageData['_id'] == null) {
+        debugPrint('[ChatScreen] Invalid message data: $data');
+        return;
+      }
+
+      // Skip if the message is from the current user
+      final senderId = messageData['sender']?['_id']?.toString();
+      if (senderId == widget.currentUserId) {
+        debugPrint('[ChatScreen] Skipping own message: ${messageData['_id']}');
+        return;
+      }
+
+      final message = ChatMessage.fromJson(messageData);
+      debugPrint('[ChatScreen] Processing new message: ${message.id}');
+      if (!_messages.any((msg) => msg.id == message.id)) {
+        _handleNewMessage(message);
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider.markAsRead(message.id);
+        debugPrint(
+            '[ChatScreen] Message added and marked as read: ${message.id}');
+      } else {
+        debugPrint('[ChatScreen] Duplicate message skipped: ${message.id}');
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Error processing message: $e');
     }
   }
 
   void _handleNewMessage(ChatMessage message) {
+    if (!mounted) {
+      debugPrint('[ChatScreen] Cannot handle new message, screen not mounted');
+      return;
+    }
     setState(() {
-      _messages.add(message);
+      if (!_messages.any((msg) => msg.id == message.id)) {
+        _messages = [..._messages, message];
+        debugPrint(
+            '[ChatScreen] Added new message: ${message.id}, total messages: ${_messages.length}');
+      }
     });
     _scrollToBottom();
   }
@@ -92,20 +142,28 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final chat = await _chatFuture;
-      setState(() {
-        _messages = chat.messages;
-      });
+      if (mounted) {
+        setState(() {
+          final existingIds = _messages.map((msg) => msg.id).toSet();
+          _messages = [
+            ..._messages,
+            ...chat.messages.where((msg) => !existingIds.contains(msg.id))
+          ];
+          debugPrint(
+              '[ChatScreen] Loaded chat with ${chat.messages.length} messages, total: ${_messages.length}');
+        });
 
-      // Mark all messages as read when chat loads
-      final notificationProvider =
-          Provider.of<NotificationProvider>(context, listen: false);
-      notificationProvider.markAllAsReadForTicket(widget.ticketId);
-
-      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        final notificationProvider =
+            Provider.of<NotificationProvider>(context, listen: false);
+        notificationProvider.markAllAsReadForTicket(widget.ticketId);
+        _scrollToBottom();
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load chat: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load chat: $e')),
+        );
+      }
     }
   }
 
@@ -121,42 +179,63 @@ class _ChatScreenState extends State<ChatScreen> {
         files: _selectedFiles.map((xfile) => File(xfile.path)).toList(),
       );
 
-      setState(() {
-        _messages.add(message);
-        _messageController.clear();
-        _selectedFiles.clear();
-      });
-      _scrollToBottom();
+      if (mounted) {
+        setState(() {
+          if (!_messages.any((msg) => msg.id == message.id)) {
+            _messages.add(message); // Add sender's message immediately
+            debugPrint('[ChatScreen] Sent and added message: ${message.id}');
+          }
+          _messageController.clear();
+          _selectedFiles.clear();
+        });
+        _scrollToBottom();
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to send message: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send message: $e')),
+        );
+      }
     }
   }
 
   Future<void> _pickFiles() async {
     try {
-      final pickedFiles = await _picker.pickMultiImage();
-      if (pickedFiles != null) {
+      final pickedFiles = await _picker.pickMultiImage(
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 85,
+      );
+      if (mounted) {
         setState(() {
           _selectedFiles.addAll(pickedFiles);
         });
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick files: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to pick images: $e')),
+        );
+      }
     }
   }
 
   void _scrollToBottom() {
+    final now = DateTime.now();
+    if (now.difference(_lastScrollTime) < _scrollDebounceDuration) return;
+
+    _lastScrollTime = now;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (_scrollController.hasClients && mounted) {
+        debugPrint('[ChatScreen] Scrolling to bottom');
         _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
+          0,
           duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
+      } else {
+        debugPrint(
+            '[ChatScreen] ScrollController not ready or screen not mounted');
       }
     });
   }
@@ -191,9 +270,11 @@ class _ChatScreenState extends State<ChatScreen> {
                   top: 0,
                   child: GestureDetector(
                     onTap: () {
-                      setState(() {
-                        _selectedFiles.removeAt(index);
-                      });
+                      if (mounted) {
+                        setState(() {
+                          _selectedFiles.removeAt(index);
+                        });
+                      }
                     },
                     child: Container(
                       decoration: const BoxDecoration(
@@ -338,60 +419,75 @@ class _ChatScreenState extends State<ChatScreen> {
                       ),
                     ),
                   if (message.files.isNotEmpty)
-                    Column(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: message.files.map((file) {
-                        return Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: GestureDetector(
-                            onTap: () => _showFullScreenImage(file.path),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                file.path,
-                                width: 150,
-                                height: 150,
-                                fit: BoxFit.cover,
-                                loadingBuilder:
-                                    (context, child, loadingProgress) {
-                                  if (loadingProgress == null) return child;
-                                  return Container(
-                                    width: 150,
-                                    height: 150,
-                                    color: isDarkMode
-                                        ? Colors.grey[800]
-                                        : Colors.grey[200],
-                                    child: Center(
-                                      child: CircularProgressIndicator(
-                                        value: loadingProgress
-                                                    .expectedTotalBytes !=
-                                                null
-                                            ? loadingProgress
-                                                    .cumulativeBytesLoaded /
-                                                loadingProgress
-                                                    .expectedTotalBytes!
-                                            : null,
-                                      ),
+                        return GestureDetector(
+                          onTap: () => _showFullScreenImage(file.path),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              file.path,
+                              width: 150,
+                              height: 150,
+                              fit: BoxFit.cover,
+                              frameBuilder: (context, child, frame,
+                                  wasSynchronouslyLoaded) {
+                                if (wasSynchronouslyLoaded) return child;
+                                return AnimatedOpacity(
+                                  opacity: frame == null ? 0 : 1,
+                                  duration: const Duration(milliseconds: 500),
+                                  child: child,
+                                );
+                              },
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Container(
+                                  width: 150,
+                                  height: 150,
+                                  color: isDarkMode
+                                      ? Colors.grey[800]
+                                      : Colors.grey[200],
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      value:
+                                          loadingProgress.expectedTotalBytes !=
+                                                  null
+                                              ? loadingProgress
+                                                      .cumulativeBytesLoaded /
+                                                  loadingProgress
+                                                      .expectedTotalBytes!
+                                              : null,
                                     ),
-                                  );
-                                },
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: 150,
-                                    height: 150,
-                                    color: isDarkMode
-                                        ? Colors.grey[800]
-                                        : Colors.grey[200],
-                                    child: Center(
-                                      child: Icon(
-                                        Icons.error,
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 150,
+                                  height: 150,
+                                  color: isDarkMode
+                                      ? Colors.grey[800]
+                                      : Colors.grey[200],
+                                  child: Center(
+                                    child: IconButton(
+                                      icon: Icon(
+                                        Icons.refresh,
                                         color: isDarkMode
                                             ? Colors.white70
                                             : Colors.grey[600],
                                       ),
+                                      onPressed: () {
+                                        if (mounted) {
+                                          setState(() {});
+                                        }
+                                      },
                                     ),
-                                  );
-                                },
-                              ),
+                                  ),
+                                );
+                              },
                             ),
                           ),
                         );
@@ -421,41 +517,73 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showFullScreenImage(String imageUrl) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
+    if (mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => Scaffold(
             backgroundColor: Colors.black,
-            iconTheme: const IconThemeData(color: Colors.white),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.download),
-                onPressed: () {
-                  // TODO: Implement download functionality
-                },
-              ),
-            ],
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              panEnabled: true,
-              minScale: 0.5,
-              maxScale: 3.0,
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.contain,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              iconTheme: const IconThemeData(color: Colors.white),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.download),
+                  onPressed: () async {
+                    if (mounted) {
+                      try {
+                        final response = await http.get(Uri.parse(imageUrl));
+                        if (response.statusCode == 200) {
+                          final directory = await getTemporaryDirectory();
+                          final filePath =
+                              '${directory.path}/${imageUrl.split('/').last}';
+                          final file = File(filePath);
+                          await file.writeAsBytes(response.bodyBytes);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                                content: Text('Image downloaded to $filePath')),
+                          );
+                        } else {
+                          throw Exception('Failed to download image');
+                        }
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Download failed: $e')),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ],
+            ),
+            body: Center(
+              child: InteractiveViewer(
+                panEnabled: true,
+                minScale: 0.5,
+                maxScale: 3.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const Center(child: CircularProgressIndicator());
+                  },
+                  errorBuilder: (context, error, stackTrace) => const Center(
+                    child: Icon(Icons.error, color: Colors.white, size: 48),
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
   void dispose() {
     _socketService.removeNotificationListener(_handleSocketMessage);
+    _socketService.unsubscribeFromTicket(widget.ticketId);
+    _socketService.setActiveTicketId(null); // Clear active ticketId
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -515,39 +643,67 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Column(
                     children: [
                       Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                          child: FutureBuilder<Chat>(
-                            future: _chatFuture,
-                            builder: (context, snapshot) {
-                              if (snapshot.connectionState ==
-                                  ConnectionState.waiting) {
-                                return const Center(
-                                    child: CircularProgressIndicator());
-                              } else if (snapshot.hasError) {
-                                return Center(
-                                    child: Text('Error: ${snapshot.error}'));
-                              } else {
-                                return ListView.builder(
-                                  controller: _scrollController,
-                                  itemCount: _messages.length,
-                                  itemBuilder: (context, index) {
-                                    final message = _messages[index];
-                                    return _buildMessageBubble(
-                                        message, isDarkMode);
-                                  },
-                                );
-                              }
-                            },
-                          ),
+                        child: Stack(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                              child: FutureBuilder<Chat>(
+                                future: _chatFuture,
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const Center(
+                                        child: CircularProgressIndicator());
+                                  } else if (snapshot.hasError) {
+                                    return Center(
+                                        child:
+                                            Text('Error: ${snapshot.error}'));
+                                  } else {
+                                    WidgetsBinding.instance
+                                        .addPostFrameCallback(
+                                            (_) => _scrollToBottom());
+                                    return ListView.builder(
+                                      controller: _scrollController,
+                                      reverse: true,
+                                      itemCount: _messages.length,
+                                      itemBuilder: (context, index) {
+                                        final message = _messages[
+                                            _messages.length - 1 - index];
+                                        return _buildMessageBubble(
+                                            message, isDarkMode);
+                                      },
+                                    );
+                                  }
+                                },
+                              ),
+                            ),
+                            if (!_socketService.isConnected)
+                              Positioned(
+                                bottom: 10,
+                                left: 0,
+                                right: 0,
+                                child: Center(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.8),
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Text(
+                                      'Chat server disconnected. Reconnecting...',
+                                      style: GoogleFonts.poppins(
+                                          color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       _buildFilePreview(),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
+                            horizontal: 16, vertical: 8),
                         color:
                             isDarkMode ? const Color(0xFF3A4352) : Colors.white,
                         child: Row(
@@ -565,9 +721,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               child: TextField(
                                 controller: _messageController,
                                 style: GoogleFonts.poppins(
-                                  color:
-                                      isDarkMode ? Colors.white : Colors.black,
-                                ),
+                                    color: isDarkMode
+                                        ? Colors.white
+                                        : Colors.black),
                                 decoration: InputDecoration(
                                   hintText: 'Type a message...',
                                   hintStyle: GoogleFonts.poppins(
@@ -584,9 +740,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       ? const Color(0xFF2D3646)
                                       : const Color(0xFFF2F4F5),
                                   contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
+                                      horizontal: 16, vertical: 12),
                                 ),
                                 onSubmitted: (_) => _sendMessage(),
                               ),

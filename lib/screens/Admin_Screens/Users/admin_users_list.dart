@@ -22,7 +22,6 @@ class _AdminUsersState extends State<AdminUsersList> {
   String _selectedRole = 'all';
   String _searchQuery = '';
   List<dynamic> _allUsers = [];
-  int _currentIndex = 0;
 
   void refreshUserList() {
     setState(() {
@@ -63,12 +62,6 @@ class _AdminUsersState extends State<AdminUsersList> {
           lastName.contains(searchLower) ||
           fullName.contains(searchLower);
     }).toList();
-  }
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
   }
 
   @override
@@ -232,8 +225,8 @@ class _AdminUsersState extends State<AdminUsersList> {
         ),
       ),
       bottomNavigationBar: NavbarAdmin(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
+        currentIndex: 1, // Index fixe pour cette page
+        context: context, // Contexte passé pour la navigation
       ),
     );
   }

@@ -15,19 +15,12 @@ class SolutionsListPage extends StatefulWidget {
 class _SolutionsListPageState extends State<SolutionsListPage> {
   List<dynamic> _solutions = [];
   bool _isLoading = true;
-  int _currentIndex = 0;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _fetchSolutions();
-  }
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
   }
 
   Future<void> _fetchSolutions() async {
@@ -151,8 +144,8 @@ class _SolutionsListPageState extends State<SolutionsListPage> {
                   ),
       ),
       bottomNavigationBar: NavbarAdmin(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
+        currentIndex: 3, // Index pour la page Solutions
+        context: context, // Passez le contexte pour la navigation
       ),
     );
   }

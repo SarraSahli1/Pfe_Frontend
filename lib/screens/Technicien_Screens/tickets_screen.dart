@@ -3,17 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:helpdeskfrontend/models/ticket.dart';
 import 'package:helpdeskfrontend/provider/notification_provider.dart';
-import 'package:helpdeskfrontend/screens/Technicien_Screens/createTicket.dart.dart';
+import 'package:helpdeskfrontend/screens/Client_Screens/Tickets/createTicket.dart.dart';
 import 'package:helpdeskfrontend/screens/Technicien_Screens/ticket_detail.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
 import 'package:helpdeskfrontend/services/socket_service.dart';
 import 'package:helpdeskfrontend/services/ticket_service.dart';
 import 'package:helpdeskfrontend/widgets/Header.dart';
-import 'package:helpdeskfrontend/widgets/NotificationScreen.dart';
 import 'package:helpdeskfrontend/widgets/navbar_technicien.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:badges/badges.dart' as badges;
 
 class TechnicianTicketsScreen extends StatefulWidget {
   const TechnicianTicketsScreen({Key? key}) : super(key: key);
@@ -32,23 +30,61 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
   String? _currentUserId;
   String? _token;
   late SocketService _socketService;
-  bool _isSocketConnected = false;
   bool _isInitialized = false;
   final GlobalKey<ScaffoldMessengerState> _scaffoldMessengerKey =
       GlobalKey<ScaffoldMessengerState>();
+  String _selectedStatus = 'all';
+  final List<String> _statusOptions = [
+    'all',
+    'In Progress',
+    'Resolved',
+    'Closed'
+  ];
+
+  // Very light pastel colors for cards (.shade50)
+  final Map<String, Color> _statusCardColors = {
+    'all': Colors.blueGrey.shade50,
+    'In Progress': Colors.orange.shade50,
+    'Resolved': Colors.green.shade50,
+    'Closed': Colors.indigo.shade50,
+  };
+
+  // Light pastel colors for filter chips (.shade100)
+  final Map<String, Color> _statusFilterColors = {
+    'all': Colors.blueGrey.shade100,
+    'In Progress': Colors.orange.shade100,
+    'Resolved': Colors.green.shade100,
+    'Closed': Colors.indigo.shade100,
+  };
+
+  // Vibrant colors for badges
+  final Map<String, Color> _statusBadgeColors = {
+    'all': Colors.blueGrey,
+    'In Progress': Colors.orange,
+    'Resolved': Colors.green,
+    'Closed': Colors.indigo,
+  };
+
+  // Icons for each status
+  final Map<String, IconData> _statusIcons = {
+    'all': Icons.filter_alt,
+    'In Progress': Icons.autorenew,
+    'Resolved': Icons.check_circle,
+    'Closed': Icons.lock,
+  };
 
   @override
   void initState() {
     super.initState();
-    print('TechnicianTicketsScreen: initState called');
     _socketService = SocketService();
     _searchController.addListener(_filterTickets);
-    _loadInitialData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadInitialData();
+    });
   }
 
   @override
   void dispose() {
-    print('TechnicianTicketsScreen: dispose called');
     _searchController.removeListener(_filterTickets);
     _searchController.dispose();
     _socketService.removeNotificationListener(_handleNotification);
@@ -57,111 +93,15 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
     super.dispose();
   }
 
-  void _initializeSocketService() async {
-    if (_isInitialized) {
-      print('TechnicianTicketsScreen: Already initialized, skipping');
-      return;
-    }
-    _isInitialized = true;
-
-    try {
-      final authService = AuthService();
-      _token = await authService.getToken();
-      _currentUserId = await authService.getCurrentUserId() ??
-          _extractUserIdFromToken(_token!);
-      if (_token != null && _currentUserId != null) {
-        print(
-            'TechnicianTicketsScreen: Initializing socket, token: ${_token!.substring(0, 10)}..., userId: $_currentUserId');
-        _socketService.initialize(
-          userId: _currentUserId!,
-          onNotification: _handleNotification,
-        );
-        _socketService.onConnectionStatus = (isConnected) {
-          print(
-              'TechnicianTicketsScreen: Socket connection status: $isConnected');
-          if (mounted) {
-            setState(() {
-              _isSocketConnected = isConnected;
-            });
-            if (!isConnected) {
-              _scaffoldMessengerKey.currentState?.showSnackBar(
-                SnackBar(
-                  content: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 300),
-                    child: const Text('Socket disconnected. Reconnecting...'),
-                  ),
-                ),
-              );
-            }
-          }
-        };
-        await _socketService.connect(_token!);
-      } else {
-        print(
-            'TechnicianTicketsScreen: Authentication failed, token: $_token, userId: $_currentUserId');
-        if (mounted) {
-          setState(() {
-            _errorMessage = 'Authentication failed. Please log in again.';
-          });
-        }
-      }
-    } catch (e) {
-      print('TechnicianTicketsScreen: Error initializing socket: $e');
-      if (mounted) {
-        setState(() {
-          _errorMessage = 'Failed to initialize real-time updates.';
-        });
-      }
-    }
-  }
-
-  String? _extractUserIdFromToken(String token) {
-    try {
-      final parts = token.split('.');
-      if (parts.length != 3) return null;
-      final payload = json
-          .decode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
-      return payload['userId'] ?? payload['sub'] ?? payload['_id'];
-    } catch (e) {
-      debugPrint('Error extracting user ID from token: $e');
-      return null;
-    }
-  }
-
-  Future<void> _loadInitialData() async {
-    try {
-      final authService = AuthService();
-      if (await authService.isLoggedIn()) {
-        await Provider.of<NotificationProvider>(context, listen: false)
-            .loadInitialNotifications(_token ?? '');
-        await _loadTickets();
-        _initializeSocketService();
-      } else {
-        if (mounted) {
-          setState(() {
-            _errorMessage =
-                'Technician not authenticated. Please log in again.';
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _errorMessage = e.toString().replaceAll('Exception: ', '');
-        });
-      }
-    }
-  }
-
   Future<void> _loadTickets() async {
     try {
-      if (mounted) {
-        setState(() {
-          _isRefreshing = true;
-          _errorMessage = null;
-        });
-      }
+      setState(() {
+        _isRefreshing = true;
+        _errorMessage = null;
+      });
+
       final tickets = await TicketService.getMyTickets();
+
       if (mounted) {
         setState(() {
           _ticketsFuture = Future.value(tickets);
@@ -184,10 +124,95 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
     }
   }
 
-  void _filterTickets() {
-    if (mounted) {
-      setState(() {});
+  Future<void> _loadInitialData() async {
+    try {
+      final authService = AuthService();
+      if (await authService.isLoggedIn()) {
+        await Provider.of<NotificationProvider>(context, listen: false)
+            .loadInitialNotifications(_token ?? '');
+        await _loadTickets();
+        await _initializeSocketService();
+      } else {
+        if (mounted) {
+          setState(() {
+            _errorMessage =
+                'Technician not authenticated. Please log in again.';
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+        });
+      }
     }
+  }
+
+  Future<void> _initializeSocketService() async {
+    if (_isInitialized) return;
+
+    try {
+      final authService = AuthService();
+      _token = await authService.getToken();
+      _currentUserId = await authService.getCurrentUserId() ??
+          _extractUserIdFromToken(_token!);
+
+      if (_token != null && _currentUserId != null) {
+        _socketService.initialize(
+          userId: _currentUserId!,
+          onNotification: _handleNotification,
+        );
+
+        _socketService.onConnectionStatus = (isConnected) {
+          if (mounted) {
+            setState(() {});
+          }
+        };
+
+        await _socketService.connect(_token!);
+        _isInitialized = true;
+      }
+    } catch (e) {
+      debugPrint('Error initializing socket: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Failed to initialize real-time updates.';
+        });
+      }
+    }
+  }
+
+  String? _extractUserIdFromToken(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+      final payload = json
+          .decode(utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+      return payload['userId'] ?? payload['sub'] ?? payload['_id'];
+    } catch (e) {
+      debugPrint('Error extracting user ID from token: $e');
+      return null;
+    }
+  }
+
+  List<Ticket> _filterTicketsByStatus(List<Ticket> tickets, String status) {
+    if (status == 'all') return tickets;
+    return tickets.where((ticket) => ticket.status == status).toList();
+  }
+
+  List<Ticket> _filterTicketsBySearch(List<Ticket> tickets, String query) {
+    if (query.isEmpty) return tickets;
+    return tickets.where((ticket) {
+      final title = ticket.title.toLowerCase();
+      final description = ticket.description.toLowerCase();
+      final searchLower = query.toLowerCase();
+      return title.contains(searchLower) || description.contains(searchLower);
+    }).toList();
+  }
+
+  void _filterTickets() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _refreshTickets() async {
@@ -196,20 +221,83 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
   }
 
   void _onItemTapped(int index) {
-    if (mounted) {
-      setState(() {
-        _selectedIndex = index;
-      });
-    }
+    if (mounted) setState(() => _selectedIndex = index);
+  }
+
+  Widget _buildStatusFilterChips(bool isDarkMode) {
+    return Container(
+      height: 60,
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        itemCount: _statusOptions.length,
+        itemBuilder: (context, index) {
+          final status = _statusOptions[index];
+          final isSelected = _selectedStatus == status;
+          final filterColor = _statusFilterColors[status]!;
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _statusIcons[status],
+                    size: 18,
+                    color:
+                        isSelected ? Colors.white : _statusBadgeColors[status],
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    status == 'all' ? 'All' : status,
+                    style: GoogleFonts.poppins(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: isSelected ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+              selected: isSelected,
+              selectedColor: _statusBadgeColors[status],
+              backgroundColor: filterColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(
+                  color: isSelected
+                      ? _statusBadgeColors[status]!.withOpacity(0.5)
+                      : Colors.transparent,
+                  width: 1,
+                ),
+              ),
+              elevation: 2,
+              onSelected: (selected) {
+                if (mounted) {
+                  setState(() => _selectedStatus = selected ? status : 'all');
+                }
+              },
+            ),
+          );
+        },
+      ),
+    );
   }
 
   void _handleNotification(Map<String, dynamic> data) {
-    print("TechnicianTicketsScreen: Received notification: $data");
     final notificationProvider =
         Provider.of<NotificationProvider>(context, listen: false);
     notificationProvider.addNotification(data);
-    print(
-        "TechnicianTicketsScreen: Added notification, unreadCount: ${notificationProvider.unreadCount}");
+
     if (!mounted) return;
 
     String message;
@@ -223,14 +311,7 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
 
     _scaffoldMessengerKey.currentState?.showSnackBar(
       SnackBar(
-        content: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 300),
-          child: Text(
-            message,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
+        content: Text(message),
         action: SnackBarAction(
           label: 'View',
           onPressed: () async {
@@ -255,14 +336,7 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
               if (mounted) {
                 _scaffoldMessengerKey.currentState?.showSnackBar(
                   SnackBar(
-                    content: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 300),
-                      child: Text(
-                        'Error: $e',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
+                    content: Text('Error: $e'),
                     duration: const Duration(seconds: 2),
                   ),
                 );
@@ -283,66 +357,7 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
       extendBodyBehindAppBar: true,
       appBar: AppHeader(
         title: 'My Tickets',
-        actions: [
-          Consumer<NotificationProvider>(
-            builder: (context, notificationProvider, _) {
-              print(
-                  'AppHeader badge rebuild, unreadCount: ${notificationProvider.unreadCount}, '
-                  'provider instance: ${notificationProvider.hashCode}');
-              return badges.Badge(
-                key: const ValueKey('notification_badge'),
-                showBadge: notificationProvider.unreadCount > 0,
-                badgeContent: Text(
-                  '${notificationProvider.unreadCount}',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 10,
-                  ),
-                ),
-                badgeStyle: const badges.BadgeStyle(badgeColor: Colors.red),
-                child: IconButton(
-                  key: const ValueKey('notification_icon'),
-                  icon: Icon(
-                    Icons.notifications,
-                    color: notificationProvider.unreadCount > 0
-                        ? Colors.white
-                        : Colors.white.withOpacity(0.7),
-                    size: 20,
-                  ),
-                  onPressed: () {
-                    print(
-                        'Notification icon tapped, unreadCount: ${notificationProvider.unreadCount}');
-                    showGeneralDialog(
-                      context: context,
-                      barrierDismissible: true,
-                      barrierLabel: 'Notifications',
-                      pageBuilder: (context, _, __) => Center(
-                        child: NotificationCard(
-                          onClose: () => Navigator.of(context).pop(),
-                        ),
-                      ),
-                      barrierColor: Colors.black.withOpacity(0.5),
-                      transitionBuilder: (context, animation, __, child) {
-                        return ScaleTransition(
-                          scale: CurvedAnimation(
-                            parent: animation,
-                            curve: Curves.easeInOut,
-                          ),
-                          child: child,
-                        );
-                      },
-                      transitionDuration: const Duration(milliseconds: 200),
-                    );
-                  },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-                position: badges.BadgePosition.topEnd(top: -8, end: -8),
-              );
-            },
-          ),
-          const SizedBox(width: 8),
-        ],
+        actions: const [],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -350,7 +365,7 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
             context,
             MaterialPageRoute(builder: (context) => const CreateTicketPage()),
           );
-          if (result == true) {
+          if (result == true && mounted) {
             await _refreshTickets();
           }
         },
@@ -419,6 +434,8 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
                   ),
                 ),
               ),
+              _buildStatusFilterChips(isDarkMode),
+              const SizedBox(height: 8),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
@@ -479,6 +496,197 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
     );
   }
 
+  Widget _buildTicketList(List<Ticket> tickets) {
+    final filteredTickets = _filterTicketsByStatus(
+      _filterTicketsBySearch(tickets, _searchController.text),
+      _selectedStatus,
+    );
+
+    if (filteredTickets.isEmpty) {
+      return _buildEmptyFilterState();
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+      itemCount: filteredTickets.length,
+      itemBuilder: (context, index) {
+        final ticket = filteredTickets[index];
+        return _buildTicketCard(ticket);
+      },
+    );
+  }
+
+  Widget _buildTicketCard(Ticket ticket) {
+    final cardColor = _statusCardColors[ticket.status] ?? Colors.grey.shade50;
+    final badgeColor = _statusBadgeColors[ticket.status] ?? Colors.grey;
+    final textColor = Colors.black87;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16.0),
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15.0),
+      ),
+      color: cardColor,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15.0),
+        onTap: () async {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) =>
+                const Center(child: CircularProgressIndicator()),
+          );
+
+          try {
+            if (_token == null || _currentUserId == null) {
+              await _loadUserData();
+            }
+
+            if (_token == null || _currentUserId == null) {
+              throw Exception('Authentication required. Please log in again.');
+            }
+
+            if (mounted) {
+              Navigator.of(context).pop();
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TicketDetailScreen(
+                    ticket: ticket,
+                    token: _token!,
+                    currentUserId: _currentUserId!,
+                    onSolutionAdded: _loadTickets,
+                  ),
+                ),
+              );
+              Provider.of<NotificationProvider>(context, listen: false)
+                  .markAllAsReadForTicket(ticket.id);
+            }
+          } catch (e) {
+            if (mounted) {
+              Navigator.of(context).pop();
+              _scaffoldMessengerKey.currentState?.showSnackBar(
+                SnackBar(
+                  content: Text('Error: $e'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            }
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      ticket.title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 18.0,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: badgeColor.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      ticket.status,
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (ticket.description.isNotEmpty)
+                Text(
+                  ticket.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: textColor.withOpacity(0.7),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today,
+                    size: 16,
+                    color: textColor.withOpacity(0.6),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Created: ${_formatDate(ticket.creationDate)}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: textColor.withOpacity(0.6),
+                    ),
+                  ),
+                  if (ticket.assignedDate != null) ...[
+                    const SizedBox(width: 12),
+                    Icon(
+                      Icons.person,
+                      size: 16,
+                      color: textColor.withOpacity(0.6),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Assigned: ${_formatDate(ticket.assignedDate!)}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: textColor.withOpacity(0.6),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              if (ticket.equipmentHelpdeskIds != null &&
+                  ticket.equipmentHelpdeskIds!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.computer,
+                        size: 16,
+                        color: textColor.withOpacity(0.6),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${ticket.equipmentHelpdeskIds!.length} equipment',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: textColor.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildLoading() {
     return Center(
       child: Column(
@@ -516,18 +724,15 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32.0),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 300),
-              child: Text(
-                error,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                ),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+            child: Text(
+              error,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
               ),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(height: 16),
@@ -621,179 +826,36 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
     );
   }
 
-  Widget _buildTicketList(List<Ticket> tickets) {
-    final filteredTickets = _searchController.text.isEmpty
-        ? tickets
-        : tickets
-            .where((ticket) =>
-                ticket.title
-                    .toLowerCase()
-                    .contains(_searchController.text.toLowerCase()) ||
-                ticket.description
-                    .toLowerCase()
-                    .contains(_searchController.text.toLowerCase()))
-            .toList();
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-      itemCount: filteredTickets.length,
-      itemBuilder: (context, index) {
-        final ticket = filteredTickets[index];
-        return _buildTicketCard(ticket);
-      },
-    );
-  }
-
-  Widget _buildTicketCard(Ticket ticket) {
+  Widget _buildEmptyFilterState() {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16.0),
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(15.0),
-      ),
-      color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(15.0),
-        onTap: () async {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) =>
-                const Center(child: CircularProgressIndicator()),
-          );
-
-          try {
-            if (_token == null || _currentUserId == null) {
-              await _loadUserData();
-            }
-
-            if (_token == null || _currentUserId == null) {
-              throw Exception('Authentication required. Please log in again.');
-            }
-
-            if (mounted) {
-              Navigator.of(context).pop();
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TicketDetailScreen(
-                    ticket: ticket,
-                    token: _token!,
-                    currentUserId: _currentUserId!,
-                    onSolutionAdded: _loadTickets,
-                  ),
-                ),
-              );
-              Provider.of<NotificationProvider>(context, listen: false)
-                  .markAllAsReadForTicket(ticket.id);
-            }
-          } catch (e) {
-            if (mounted) {
-              Navigator.of(context).pop();
-              _scaffoldMessengerKey.currentState?.showSnackBar(
-                SnackBar(
-                  content: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 300),
-                    child: Text(
-                      'Error: $e',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  duration: const Duration(seconds: 2),
-                ),
-              );
-            }
-          }
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                ticket.title,
-                style: GoogleFonts.poppins(
-                  fontSize: 18.0,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : Colors.black87,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              if (ticket.description.isNotEmpty)
-                Text(
-                  ticket.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.poppins(
-                    fontSize: 12,
-                    color: isDarkMode ? Colors.white70 : Colors.black54,
-                  ),
-                ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 16,
-                    color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Created: ${_formatDate(ticket.creationDate)}',
-                    style: GoogleFonts.poppins(
-                      fontSize: 12,
-                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                  ),
-                  if (ticket.assignedDate != null) ...[
-                    const SizedBox(width: 12),
-                    Icon(
-                      Icons.person,
-                      size: 16,
-                      color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Assigned: ${_formatDate(ticket.assignedDate!)}',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-              if (ticket.equipmentHelpdeskIds != null &&
-                  ticket.equipmentHelpdeskIds!.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8.0),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.computer,
-                        size: 16,
-                        color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${ticket.equipmentHelpdeskIds!.length} equipment',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12,
-                          color:
-                              isDarkMode ? Colors.grey[400] : Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.search_off,
+            size: 60,
+            color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
           ),
-        ),
+          const SizedBox(height: 16),
+          Text(
+            'No tickets found',
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try adjusting your search or filter criteria',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+            ),
+          ),
+        ],
       ),
     );
   }

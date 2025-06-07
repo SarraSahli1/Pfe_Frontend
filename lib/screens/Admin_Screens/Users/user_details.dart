@@ -7,9 +7,10 @@ import 'package:helpdeskfrontend/services/config.dart';
 import 'package:helpdeskfrontend/services/equipement_service.dart';
 import 'package:helpdeskfrontend/services/user_service.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
-import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+
+import 'package:provider/provider.dart';
 
 class UserDetailsScreen extends StatefulWidget {
   final String userId;
@@ -28,6 +29,8 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   List<dynamic> _userEquipment = [];
   bool _isLoadingEquipment = false;
   bool _isLoadingUserEquipment = false;
+  bool _showEquipmentCard =
+      false; // New state variable to toggle equipment card
   String? _equipmentError;
   String? _userEquipmentError;
 
@@ -395,7 +398,6 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Profile Image
                         Container(
                           width: 120,
                           height: 120,
@@ -421,7 +423,6 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 20),
-                        // Name
                         Text(
                           '${user.firstName ?? "N/A"} ${user.lastName ?? "N/A"}',
                           style: GoogleFonts.inter(
@@ -431,7 +432,6 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        // Role
                         Text(
                           user.authority ?? 'N/A',
                           style: GoogleFonts.inter(
@@ -558,76 +558,140 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                             style: TextStyle(color: Colors.white),
                           ),
                         ),
-                        const SizedBox(height: 20),
-
-                        // User Equipment List
-                        Text(
-                          'Assigned Equipment',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isDarkMode ? Colors.white : Colors.black,
+                        const SizedBox(height: 10),
+                        // View Equipment Button
+                        Semantics(
+                          label: 'Toggle assigned equipment list',
+                          child: ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _showEquipmentCard = !_showEquipmentCard;
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  isDarkMode ? Colors.blue[800] : Colors.blue,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 12),
+                            ),
+                            child: Text(
+                              _showEquipmentCard
+                                  ? 'Hide Equipment'
+                                  : 'View Equipment',
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 10),
-                        _isLoadingUserEquipment
-                            ? const Center(child: CircularProgressIndicator())
-                            : _userEquipmentError != null
-                                ? Text(
-                                    'Error: $_userEquipmentError',
-                                    style: TextStyle(color: Colors.red),
-                                  )
-                                : _userEquipment.isEmpty
-                                    ? Text(
-                                        'No equipment assigned',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 14,
-                                          color: isDarkMode
-                                              ? Colors.white70
-                                              : Colors.black54,
-                                        ),
-                                      )
-                                    : ListView.builder(
-                                        shrinkWrap: true,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        itemCount: _userEquipment.length,
-                                        itemBuilder: (context, index) {
-                                          final equipment =
-                                              _userEquipment[index];
-                                          return Card(
-                                            elevation: 2,
-                                            margin: const EdgeInsets.symmetric(
-                                                vertical: 4),
-                                            color: isDarkMode
-                                                ? const Color(0xFF2D3748)
-                                                : Colors.white,
-                                            child: ListTile(
-                                              title: Text(
-                                                equipment['designation'] ??
-                                                    'No designation',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.normal,
-                                                  color: isDarkMode
-                                                      ? Colors.white
-                                                      : Colors.black,
-                                                ),
-                                              ),
-                                              subtitle: Text(
-                                                equipment['serialNumber'] ??
-                                                    'No serial number',
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 14,
-                                                  color: isDarkMode
-                                                      ? Colors.white70
-                                                      : Colors.black54,
-                                                ),
-                                              ),
-                                            ),
-                                          );
-                                        },
+                        // Equipment Card
+                        AnimatedOpacity(
+                          opacity: _showEquipmentCard ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Visibility(
+                            visible: _showEquipmentCard,
+                            child: Card(
+                              elevation: 4,
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              color: isDarkMode
+                                  ? const Color(0xFF2D3748)
+                                  : Colors.white,
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Assigned Equipment',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: isDarkMode
+                                            ? Colors.white
+                                            : Colors.black,
                                       ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    _isLoadingUserEquipment
+                                        ? const Center(
+                                            child: CircularProgressIndicator())
+                                        : _userEquipmentError != null
+                                            ? Text(
+                                                'Error: $_userEquipmentError',
+                                                style: const TextStyle(
+                                                    color: Colors.red),
+                                              )
+                                            : _userEquipment.isEmpty
+                                                ? Text(
+                                                    'No equipment assigned',
+                                                    style: GoogleFonts.inter(
+                                                      fontSize: 14,
+                                                      color: isDarkMode
+                                                          ? Colors.white70
+                                                          : Colors.black54,
+                                                    ),
+                                                  )
+                                                : ListView.builder(
+                                                    shrinkWrap: true,
+                                                    physics:
+                                                        const NeverScrollableScrollPhysics(),
+                                                    itemCount:
+                                                        _userEquipment.length,
+                                                    itemBuilder:
+                                                        (context, index) {
+                                                      final equipment =
+                                                          _userEquipment[index];
+                                                      return ListTile(
+                                                        leading: Icon(
+                                                          Icons.devices_other,
+                                                          size: 24,
+                                                          color: isDarkMode
+                                                              ? Colors.white70
+                                                              : Colors
+                                                                  .blue[600],
+                                                        ),
+                                                        title: Text(
+                                                          equipment[
+                                                                  'designation'] ??
+                                                              'No designation',
+                                                          style:
+                                                              GoogleFonts.inter(
+                                                            fontSize: 16,
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .normal,
+                                                            color: isDarkMode
+                                                                ? Colors.white
+                                                                : Colors.black,
+                                                          ),
+                                                        ),
+                                                        subtitle: Text(
+                                                          equipment[
+                                                                  'serialNumber'] ??
+                                                              'No serial number',
+                                                          style:
+                                                              GoogleFonts.inter(
+                                                            fontSize: 14,
+                                                            color: isDarkMode
+                                                                ? Colors.white70
+                                                                : Colors
+                                                                    .black54,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),

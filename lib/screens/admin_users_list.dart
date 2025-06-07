@@ -204,8 +204,8 @@ class _AdminUsersState extends State<AdminUsersList> {
         ),
       ),
       bottomNavigationBar: NavbarAdmin(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
+        currentIndex: 1, // Index fixe pour cette page
+        context: context, // Contexte passé pour la navigation
       ), // Ajoutez la navbar ici
     );
   }

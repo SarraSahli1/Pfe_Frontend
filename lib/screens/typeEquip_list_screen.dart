@@ -217,8 +217,8 @@ class _TypeEquipmentListPageState extends State<TypeEquipmentListPage> {
                   ),
       ),
       bottomNavigationBar: NavbarAdmin(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
+        currentIndex: 2, // Index fixe pour cette page
+        context: context, // Contexte passé pour la navigation
       ),
     );
   }

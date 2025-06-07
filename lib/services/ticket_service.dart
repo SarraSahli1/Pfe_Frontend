@@ -493,4 +493,22 @@ class TicketService {
       rethrow;
     }
   }
+
+  static Future<List<Map<String, dynamic>>> getTopTechnicians() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/top-technicians'),
+        headers: {'Content-Type': 'application/json'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['data']);
+      } else {
+        throw Exception('Failed to load top technicians');
+      }
+    } catch (e) {
+      throw Exception('Error fetching top technicians: $e');
+    }
+  }
 }

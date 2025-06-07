@@ -17,11 +17,17 @@ class SocketService {
   Timer? _reconnectTimer;
   String? _currentToken;
   Timer? _connectionChecker;
+  String? _activeTicketId; // Track active ChatScreen ticketId
 
   bool get isConnected => _isConnected;
   factory SocketService() => _instance;
 
   SocketService._internal();
+
+  void setActiveTicketId(String? ticketId) {
+    _activeTicketId = ticketId;
+    debugPrint('[SOCKET] Active ticketId set to: $_activeTicketId');
+  }
 
   void initialize({
     required String userId,
@@ -61,13 +67,17 @@ class SocketService {
   }
 
   Future<void> connect(String token) async {
-    if (_isConnected || _isConnecting) return;
+    if (_isConnected || _isConnecting) {
+      debugPrint('[SOCKET] Already connected or connecting, skipping');
+      return;
+    }
 
     try {
       if (!JwtDecoder.isExpired(token)) {
         final decoded = JwtDecoder.decode(token);
         if (decoded['_id'] != userId) {
-          debugPrint('[SOCKET] Token userId mismatch');
+          debugPrint(
+              '[SOCKET] Token userId mismatch: ${decoded['_id']} vs $userId');
           return;
         }
       } else {
@@ -93,6 +103,7 @@ class SocketService {
 
       _setupSocketEvents();
       _socket!.connect();
+      debugPrint('[SOCKET] Connection initiated for user: $userId');
     } catch (e) {
       debugPrint('[SOCKET] Connection error: $e');
       _isConnecting = false;
@@ -153,8 +164,8 @@ class SocketService {
           'type': 'status-change',
           'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
           'message': {
-            '_id': data['_id']?.toString() ??
-                DateTime.now().millisecondsSinceEpoch.toString(),
+            '_id':
+                data['message']?['_id']?.toString() ?? data['_id']?.toString(),
             'message':
                 data['message'] ?? 'Ticket status updated to ${data['status']}',
             'status': data['status'],
@@ -176,8 +187,8 @@ class SocketService {
           'type': 'status-change',
           'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
           'message': {
-            '_id': data['_id']?.toString() ??
-                DateTime.now().millisecondsSinceEpoch.toString(),
+            '_id':
+                data['message']?['_id']?.toString() ?? data['_id']?.toString(),
             'message':
                 data['message'] ?? 'Ticket status updated to ${data['status']}',
             'status': data['status'],
@@ -199,8 +210,8 @@ class SocketService {
           'type': 'status-change',
           'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
           'message': {
-            '_id': data['_id']?.toString() ??
-                DateTime.now().millisecondsSinceEpoch.toString(),
+            '_id':
+                data['message']?['_id']?.toString() ?? data['_id']?.toString(),
             'message':
                 data['message'] ?? 'Ticket status updated to ${data['status']}',
             'status': data['status'],
@@ -222,8 +233,8 @@ class SocketService {
           'type': data['type'] ?? 'generic',
           'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
           'message': {
-            '_id': data['_id']?.toString() ??
-                DateTime.now().millisecondsSinceEpoch.toString(),
+            '_id':
+                data['message']?['_id']?.toString() ?? data['_id']?.toString(),
             'message': data['message'] ?? 'Notification received',
             'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
           },
@@ -242,11 +253,12 @@ class SocketService {
           'type': 'chat_message',
           'ticketId': data['ticketId']?.toString(),
           'message': {
-            '_id': data['_id']?.toString() ??
-                DateTime.now().millisecondsSinceEpoch.toString(),
+            '_id':
+                data['message']?['_id']?.toString() ?? data['_id']?.toString(),
             'message': data['message'] ?? '',
             'sender': data['sender'] ?? {},
             'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+            'listOfFiles': data['listOfFiles'] ?? [],
           },
         });
       } catch (e) {
@@ -256,70 +268,138 @@ class SocketService {
   }
 
   Map<String, dynamic> _parseNotificationData(dynamic data) {
-    if (data is Map<String, dynamic>) {
+    try {
+      Map<String, dynamic> parsedData;
+      if (data is Map<String, dynamic>) {
+        parsedData = data;
+      } else if (data is String) {
+        parsedData = jsonDecode(data);
+      } else {
+        throw FormatException('Invalid notification format');
+      }
+
+      final message = parsedData['message'] ?? {};
+      final sender = message['sender'] ?? {};
+
       return {
         'event': 'new-chat-notification',
         'type': 'chat_message',
-        'ticketId': data['ticketId']?.toString(),
+        'ticketId': parsedData['ticketId']?.toString() ?? '',
         'message': {
-          '_id': data['_id']?.toString() ??
-              DateTime.now().millisecondsSinceEpoch.toString(),
-          'message': data['message'] ?? '',
-          'sender': data['sender'] ?? {},
-          'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
+          '_id': message['_id']?.toString() ?? '',
+          'message': message['message']?.toString(),
+          'sender': {
+            '_id': sender['_id']?.toString() ?? '',
+            'firstName': sender['firstName']?.toString() ?? 'Unknown',
+            'image': sender['image'] != null
+                ? {
+                    '_id': sender['image']['_id']?.toString() ?? '',
+                    'fileName': sender['image']['fileName']?.toString() ?? '',
+                    'path': sender['image']['path']?.toString() ?? '',
+                    'title': sender['image']['title']?.toString() ?? '',
+                  }
+                : null,
+          },
+          'createdAt': message['createdAt']?.toString() ??
+              DateTime.now().toIso8601String(),
+          'listOfFiles':
+              message['listOfFiles'] is List ? message['listOfFiles'] : [],
         },
       };
-    } else if (data is String) {
+    } catch (e) {
+      debugPrint('[SOCKET] Parse notification error: $e');
       return {
         'event': 'new-chat-notification',
         'type': 'chat_message',
-        'data': jsonDecode(data),
+        'ticketId': '',
+        'message': {
+          '_id': '',
+          'message': '',
+          'sender': {'_id': '', 'firstName': 'Unknown', 'image': null},
+          'createdAt': DateTime.now().toIso8601String(),
+          'listOfFiles': [],
+        },
       };
     }
-    throw FormatException('Invalid notification format');
   }
 
   void _handleEvent(String event, Map<String, dynamic> data) {
-    debugPrint('[SOCKET] Handling $event with data: $data');
-    // Skip notifying listeners during disconnection for non-connection events
+    debugPrint(
+        '[SOCKET] Handling $event with data: $data, activeTicketId: $_activeTicketId');
     if (!_isConnected && event != 'connection_status') return;
     for (var listener in List.from(_notificationListeners)) {
       try {
-        listener(data);
+        listener({...data, 'activeTicketId': _activeTicketId});
       } catch (e) {
         debugPrint('[SOCKET] Listener error: $e');
       }
     }
   }
 
-  Future<void> subscribeToTicket(String ticketId) async {
-    if (_socket?.connected != true) {
-      debugPrint('[SOCKET] Not connected, queueing subscription to $ticketId');
-      if (!_subscribedTickets.contains(ticketId)) {
-        _subscribedTickets.add(ticketId);
-      }
+  Future<void> subscribeToTicket(String? ticketId) async {
+    if (ticketId == null || _subscribedTickets.contains(ticketId)) {
+      debugPrint('[SOCKET] Invalid ticketId or already subscribed: $ticketId');
       return;
     }
 
-    if (!_subscribedTickets.contains(ticketId)) {
-      _subscribedTickets.add(ticketId);
+    _subscribedTickets.add(ticketId);
+    if (_socket?.connected != true) {
+      debugPrint('[SOCKET] Not connected, queueing subscription to $ticketId');
+      await ensureConnected();
+      if (_socket?.connected != true) {
+        debugPrint('[SOCKET] Failed to connect for subscription to $ticketId');
+        return;
+      }
     }
 
-    debugPrint('[SOCKET] Subscribing to ticket: $ticketId');
     _socket!.emit('subscribe-to-chat', ticketId);
+    debugPrint('[SOCKET] Emitted subscribe-to-chat for ticket: $ticketId');
 
+    _socket!.off('chat:$ticketId');
     _socket!.on('chat:$ticketId', (data) {
-      _handleEvent('chat:$ticketId', {
-        'ticketId': ticketId,
-        'type': 'chat_message',
-        'message': {
-          '_id': data['_id']?.toString() ??
-              DateTime.now().millisecondsSinceEpoch.toString(),
-          'message': data['message'] ?? '',
-          'sender': data['sender'] ?? {},
-          'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
-        },
-      });
+      debugPrint('[SOCKET] Received chat:$ticketId event: $data');
+      try {
+        final messageData = {
+          '_id': data['_id']?.toString() ?? '',
+          'message': data['message']?.toString(),
+          'sender': {
+            '_id': data['sender']?['_id']?.toString() ?? '',
+            'firstName': data['sender']?['firstName']?.toString() ?? 'Unknown',
+            'image': data['sender']?['image'] != null
+                ? {
+                    '_id': data['sender']['image']['_id']?.toString() ?? '',
+                    'fileName':
+                        data['sender']['image']['fileName']?.toString() ?? '',
+                    'path': data['sender']['image']['path']?.toString() ?? '',
+                    'title': data['sender']['image']['title']?.toString() ?? '',
+                  }
+                : null,
+          },
+          'createdAt':
+              data['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+          'updatedAt':
+              data['updatedAt']?.toString() ?? DateTime.now().toIso8601String(),
+          'listOfFiles': data['listOfFiles'] is List
+              ? (data['listOfFiles'] as List)
+                  .map((file) => {
+                        '_id': file['_id']?.toString() ?? '',
+                        'fileName': file['fileName']?.toString() ?? '',
+                        'path': file['path']?.toString() ?? '',
+                        'title': file['title']?.toString() ?? '',
+                      })
+                  .toList()
+              : [],
+        };
+
+        _handleEvent('chat:$ticketId', {
+          'ticketId': ticketId,
+          'type': 'chat_message',
+          'message': messageData,
+          'activeTicketId': _activeTicketId,
+        });
+      } catch (e) {
+        debugPrint('[SOCKET] Error processing chat:$ticketId event: $e');
+      }
     });
   }
 
@@ -328,6 +408,7 @@ class SocketService {
     if (_socket?.connected == true) {
       _socket!.emit('unsubscribe-from-chat', ticketId);
       _socket!.off('chat:$ticketId');
+      debugPrint('[SOCKET] Unsubscribed from ticket: $ticketId');
     }
   }
 
@@ -335,8 +416,10 @@ class SocketService {
     if (_subscribedTickets.isNotEmpty) {
       debugPrint(
           '[SOCKET] Resubscribing to ${_subscribedTickets.length} tickets');
-      for (var ticketId in _subscribedTickets) {
+      for (var ticketId in List.from(_subscribedTickets)) {
+        _socket!.off('chat:$ticketId');
         subscribeToTicket(ticketId);
+        debugPrint('[SOCKET] Resubscribed to ticket: $ticketId');
       }
     }
   }
@@ -351,14 +434,31 @@ class SocketService {
   }
 
   void _startReconnect(String? token) {
-    if (_reconnectTimer != null || _isConnecting || _isConnected) return;
-    if (token == null) return;
+    if (_reconnectTimer != null ||
+        _isConnecting ||
+        _isConnected ||
+        token == null) return;
+
+    int retryCount = 0;
+    const maxRetries = 5;
+    const baseDelay = Duration(seconds: 5);
 
     debugPrint('[SOCKET] Starting reconnect attempts');
-    _reconnectTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (!_isConnected && !_isConnecting) {
-        debugPrint('[SOCKET] Attempting to reconnect');
+    _reconnectTimer = Timer.periodic(baseDelay, (timer) {
+      if (!_isConnected && !_isConnecting && retryCount < maxRetries) {
+        debugPrint('[SOCKET] Reconnect attempt ${retryCount + 1}/$maxRetries');
         connect(token);
+        retryCount++;
+      } else if (retryCount >= maxRetries) {
+        debugPrint('[SOCKET] Max reconnect attempts reached');
+        timer.cancel();
+        _reconnectTimer = null;
+        onConnectionStatus?.call(false);
+        _handleEvent('connection_failed', {
+          'message':
+              'Failed to reconnect to chat server after $maxRetries attempts',
+          'activeTicketId': _activeTicketId,
+        });
       }
     });
   }
@@ -380,6 +480,8 @@ class SocketService {
       if (onConnectionStatus != null) {
         onConnectionStatus!(false);
       }
+      _subscribedTickets.clear();
+      _activeTicketId = null;
     }
   }
 
@@ -388,6 +490,7 @@ class SocketService {
     disconnect();
     _notificationListeners.clear();
     _subscribedTickets.clear();
+    _activeTicketId = null;
     debugPrint('[SOCKET] Service disposed');
   }
 
@@ -402,6 +505,7 @@ class SocketService {
 Status: ${_isConnected ? 'Connected' : _isConnecting ? 'Connecting' : 'Disconnected'}
 User ID: $userId
 Subscribed tickets: ${_subscribedTickets.join(', ')}
+Active ticketId: $_activeTicketId
 Active listeners: ${_notificationListeners.length}
 Reconnect timer: ${_reconnectTimer != null ? 'Active' : 'Inactive'}
 ''');

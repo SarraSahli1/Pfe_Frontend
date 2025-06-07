@@ -20,19 +20,12 @@ class _TypeEquipmentListPageState extends State<TypeEquipmentListPage> {
   List<dynamic> _typeEquipments = [];
   bool _isLoading = true;
   String _selectedFilter = 'all';
-  int _currentIndex = 0;
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _fetchTypeEquipments();
-  }
-
-  void _onItemTapped(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
   }
 
   Future<void> _fetchTypeEquipments() async {
@@ -262,8 +255,8 @@ class _TypeEquipmentListPageState extends State<TypeEquipmentListPage> {
                   ),
       ),
       bottomNavigationBar: NavbarAdmin(
-        currentIndex: _currentIndex,
-        onTap: _onItemTapped,
+        currentIndex: 2, // Index pour la page Equipements
+        context: context,
       ),
     );
   }

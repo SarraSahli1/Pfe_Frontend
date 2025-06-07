@@ -1,4 +1,3 @@
-// chat_service.dart
 import 'dart:io';
 import 'package:helpdeskfrontend/models/chat_message.dart';
 import 'package:helpdeskfrontend/services/config.dart';
@@ -7,17 +6,21 @@ import 'package:http_parser/http_parser.dart';
 import 'dart:convert';
 
 class ChatService {
-  // Remove the baseUrl parameter since we're using Config.baseUrl now
   Future<Chat> getChatForTicket(String ticketId, String token) async {
-    final response = await http.get(
-      Uri.parse('${Config.baseUrl}/chat/getChatForTicket/$ticketId'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
+    try {
+      final response = await http.get(
+        Uri.parse('${Config.baseUrl}/chat/getChatForTicket/$ticketId'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
 
-    if (response.statusCode == 200) {
-      return Chat.fromJson(json.decode(response.body));
-    } else {
-      throw Exception('Failed to load chat');
+      if (response.statusCode == 200) {
+        return Chat.fromJson(json.decode(response.body));
+      } else {
+        throw Exception('Failed to load chat: ${response.body}');
+      }
+    } catch (e) {
+      print('[ChatService] Error fetching chat: $e');
+      rethrow;
     }
   }
 
@@ -28,31 +31,58 @@ class ChatService {
     required String token,
     List<File>? files,
   }) async {
-    final uri = Uri.parse('${Config.baseUrl}/chat/sendMessageToChat/$ticketId');
-    var request = http.MultipartRequest('POST', uri);
+    try {
+      final uri =
+          Uri.parse('${Config.baseUrl}/chat/sendMessageToChat/$ticketId');
+      var request = http.MultipartRequest('POST', uri);
 
-    request.headers['Authorization'] = 'Bearer $token';
-    request.fields['senderId'] = senderId;
-    request.fields['message'] = message;
-
-    if (files != null) {
-      for (var file in files) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'files',
-          file.path,
-          contentType: MediaType('application', 'octet-stream'),
-        ));
+      request.headers['Authorization'] = 'Bearer $token';
+      request.fields['senderId'] = senderId;
+      if (message.isNotEmpty) {
+        request.fields['message'] = message;
       }
+
+      if (files != null && files.isNotEmpty) {
+        for (var file in files) {
+          final mimeType = await _getMimeType(file);
+          if (!['image/jpeg', 'image/png', 'image/gif'].contains(mimeType)) {
+            throw Exception('Invalid file type: $mimeType');
+          }
+          request.files.add(await http.MultipartFile.fromPath(
+            'files',
+            file.path,
+            contentType: MediaType.parse(mimeType),
+          ));
+        }
+      }
+
+      final response = await request.send();
+      final responseString = await response.stream.bytesToString();
+
+      if (response.statusCode == 201) {
+        final responseData = json.decode(responseString);
+        return ChatMessage.fromJson(responseData['data']);
+      } else {
+        throw Exception('Failed to send message: $responseString');
+      }
+    } catch (e) {
+      print('[ChatService] Error sending message: $e');
+      rethrow;
     }
+  }
 
-    final response = await request.send();
-    final responseString = await response.stream.bytesToString();
-
-    if (response.statusCode == 201) {
-      final responseData = json.decode(responseString);
-      return ChatMessage.fromJson(responseData['data']);
-    } else {
-      throw Exception('Failed to send message');
+  Future<String> _getMimeType(File file) async {
+    final extension = file.path.split('.').last.toLowerCase();
+    switch (extension) {
+      case 'jpg':
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      default:
+        return 'application/octet-stream';
     }
   }
 }
