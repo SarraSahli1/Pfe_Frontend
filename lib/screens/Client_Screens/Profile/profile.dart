@@ -913,8 +913,8 @@ class _ProfilePageState extends State<ProfilePage> {
           final user = snapshot.data!;
           if (user.authority == 'technician') {
             return NavbarTechnician(
-              currentIndex: 3,
-              onTap: (index) {},
+              currentIndex: 1, // Profile is index 1 in technician navbar
+              context: context,
             );
           } else {
             return NavbarClient(

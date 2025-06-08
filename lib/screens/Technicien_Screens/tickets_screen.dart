@@ -460,8 +460,8 @@ class _TechnicianTicketsScreenState extends State<TechnicianTicketsScreen> {
         ),
       ),
       bottomNavigationBar: NavbarTechnician(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        currentIndex: 2, // Index pour Tickets
+        context: context,
       ),
     );
   }

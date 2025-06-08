@@ -727,7 +727,7 @@ class _CreateTicketPageState extends State<CreateTicketPage> {
       ),
       bottomNavigationBar: NavbarTechnician(
         currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        context: context, // Added context parameter to match admin style
       ),
     );
   }

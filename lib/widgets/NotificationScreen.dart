@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:helpdeskfrontend/screens/Chat_Screens/chat_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/notification_provider.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Tickets/ticket_detail_screen.dart';
@@ -63,10 +64,13 @@ class NotificationScreen extends StatelessWidget {
                   final senderName = notification['message']?['sender']
                           ?['firstName'] ??
                       'Unknown';
+                  final listOfFiles =
+                      notification['message']?['listOfFiles'] ?? [];
                   title = 'Ticket $ticketId';
-                  subtitle =
-                      '$senderName: ${notification['message']?['message'] ?? ''}';
-                  icon = Icons.message;
+                  subtitle = listOfFiles.isNotEmpty
+                      ? '$senderName has sent an image'
+                      : '$senderName: ${notification['message']?['message'] ?? ''}';
+                  icon = listOfFiles.isNotEmpty ? Icons.image : Icons.message;
                 } else {
                   title = 'Notification';
                   subtitle = notification['message']?['message'] ??
@@ -111,20 +115,35 @@ class NotificationScreen extends StatelessWidget {
                         return;
                       }
 
-                      final ticket =
-                          await TicketService.getTicketDetails(ticketId);
                       notificationProvider.markAsRead(messageId);
 
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => TicketDetailScreen(
-                            ticket: ticket,
-                            token: token,
-                            currentUserId: userId,
+                      if (type == 'chat_message') {
+                        // Navigate to ChatScreen for chat messages
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatScreen(
+                              ticketId: ticketId,
+                              token: token,
+                              currentUserId: userId,
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      } else {
+                        // Navigate to TicketDetailScreen for other notifications
+                        final ticket =
+                            await TicketService.getTicketDetails(ticketId);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => TicketDetailScreen(
+                              ticket: ticket,
+                              token: token,
+                              currentUserId: userId,
+                            ),
+                          ),
+                        );
+                      }
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(content: Text('Error: ${e.toString()}')),

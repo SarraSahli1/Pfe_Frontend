@@ -6,7 +6,7 @@ import 'package:helpdeskfrontend/services/config.dart';
 class NotificationProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _notifications = [];
   int _unreadCount = 0;
-  String? _currentUserId; // Track current user ID
+  String? _currentUserId;
 
   List<Map<String, dynamic>> get notifications => _notifications;
   int get unreadCount => _unreadCount;
@@ -22,8 +22,9 @@ class NotificationProvider extends ChangeNotifier {
     final messageId = notification['message']?['_id'];
     final ticketId = notification['ticketId'];
     final senderId = notification['message']?['sender']?['_id']?.toString();
+    final listOfFiles = notification['message']?['listOfFiles'] ?? [];
     debugPrint(
-        '[NotificationProvider] Adding notification: $notification, activeTicketId: $activeTicketId');
+        '[NotificationProvider] Adding notification: $notification, activeTicketId: $activeTicketId, hasFiles: ${listOfFiles.isNotEmpty}');
 
     // Skip if user is viewing the ChatScreen for this ticket
     if (ticketId != null && ticketId == activeTicketId) {
@@ -41,7 +42,13 @@ class NotificationProvider extends ChangeNotifier {
 
     if (messageId != null &&
         !_notifications.any((n) => n['message']?['_id'] == messageId)) {
-      _notifications.add(notification);
+      _notifications.add({
+        ...notification,
+        'message': {
+          ...notification['message'],
+          'listOfFiles': listOfFiles, // Ensure listOfFiles is included
+        },
+      });
       _unreadCount++;
       debugPrint(
           '[NotificationProvider] Notification added, unreadCount: $_unreadCount');

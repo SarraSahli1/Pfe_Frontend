@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:helpdeskfrontend/screens/Admin_Screens/Dashboard/admin_dashboard.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Users/admin_users_list.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Dashboard/client_dashboard.dart';
 import 'package:helpdeskfrontend/screens/First_Screens/role_screen.dart';
@@ -52,8 +53,6 @@ class _SignInScreenState extends State<SignInScreen> {
       }
       return;
     }
-
-    if (_isMounted) _showError('Connexion en cours...');
 
     try {
       final result = await _authService.loginUser(
@@ -113,7 +112,7 @@ class _SignInScreenState extends State<SignInScreen> {
     Widget destination;
     switch (authority) {
       case 'admin':
-        destination = const AdminUsersList();
+        destination = const DashboardAdmin();
         break;
       case 'client':
         destination = const ClientDashboard();

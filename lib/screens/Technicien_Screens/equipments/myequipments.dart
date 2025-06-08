@@ -715,8 +715,8 @@ class _MyEquipmentPageState extends State<MyEquipmentPage> {
         ),
       ),
       bottomNavigationBar: NavbarTechnician(
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        currentIndex: 4, // Index pour Equipment
+        context: context,
       ),
     );
   }

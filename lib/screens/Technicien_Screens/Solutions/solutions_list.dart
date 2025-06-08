@@ -181,7 +181,7 @@ class _SolutionsListPageState extends State<SolutionsListPage> {
       ),
       bottomNavigationBar: NavbarTechnician(
         currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
+        context: context, // Added context parameter to match admin style
       ),
     );
   }
