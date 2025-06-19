@@ -181,63 +181,46 @@ class AuthService {
     return null;
   }
 
-  Future<Map<String, dynamic>> forgotPassword({required String email}) async {
-    final Uri url = Uri.parse('${Config.baseUrl}/auth/forgot-password');
-
+  Future<bool> forgotPassword(String email) async {
     try {
       final response = await http.post(
-        url,
+        Uri.parse('${Config.baseUrl}/auth/forgot-password'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'email': email}),
+        body: json.encode({'email': email}),
       );
 
-      if (response.statusCode == 200) {
-        return {
-          "success": true,
-          "message": "Email de réinitialisation envoyé avec succès",
-        };
-      } else {
-        final responseData = jsonDecode(response.body);
-        return {
-          "success": false,
-          "message": responseData['message'] ?? "Échec de la demande",
-        };
-      }
+      return response.statusCode == 200;
     } catch (e) {
-      return {"success": false, "message": "Une erreur est survenue: $e"};
+      rethrow;
     }
   }
 
   Future<Map<String, dynamic>> resetPassword({
-    required String token,
+    required String email,
+    required String code,
     required String newPassword,
   }) async {
-    final Uri url = Uri.parse('${Config.baseUrl}/auth/reset-password');
-
     try {
       final response = await http.post(
-        url,
+        Uri.parse('${Config.baseUrl}/auth/reset-password'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'token': token,
+        body: json.encode({
+          'email': email,
+          'code': code,
           'newPassword': newPassword,
         }),
       );
 
-      if (response.statusCode == 200) {
-        return {
-          "success": true,
-          "message": "Mot de passe réinitialisé avec succès",
-        };
-      } else {
-        final responseData = jsonDecode(response.body);
-        return {
-          "success": false,
-          "message": responseData['message'] ?? "Échec de la réinitialisation",
-        };
-      }
+      final data = json.decode(response.body);
+      return {
+        'success': response.statusCode == 200,
+        'message': data['message'] ?? 'Erreur inconnue',
+      };
     } catch (e) {
-      return {"success": false, "message": "Une erreur est survenue: $e"};
+      return {
+        'success': false,
+        'message': 'Erreur réseau: $e',
+      };
     }
   }
 }

@@ -312,4 +312,20 @@ class EquipmentService {
       throw Exception('Error: ${e.toString()}');
     }
   }
+
+  Future<void> toggleEquipmentActiveStatus(
+      String equipmentId, bool newStatus) async {
+    try {
+      final response = await http.patch(
+        Uri.parse('${Config.baseUrl}/equipment/$equipmentId/toggle-active'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'isActive': newStatus}),
+      );
+      if (response.statusCode != 200) {
+        throw Exception('Failed to toggle equipment status');
+      }
+    } catch (e) {
+      throw Exception('Error toggling equipment status: $e');
+    }
+  }
 }

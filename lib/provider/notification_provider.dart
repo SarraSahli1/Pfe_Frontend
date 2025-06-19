@@ -26,14 +26,12 @@ class NotificationProvider extends ChangeNotifier {
     debugPrint(
         '[NotificationProvider] Adding notification: $notification, activeTicketId: $activeTicketId, hasFiles: ${listOfFiles.isNotEmpty}');
 
-    // Skip if user is viewing the ChatScreen for this ticket
     if (ticketId != null && ticketId == activeTicketId) {
       debugPrint(
           '[NotificationProvider] Skipping notification for active chat: $ticketId');
       return;
     }
 
-    // Skip if the notification is for the sender's own message
     if (senderId != null && senderId == _currentUserId) {
       debugPrint(
           '[NotificationProvider] Skipping notification for own message: $messageId');
@@ -41,12 +39,18 @@ class NotificationProvider extends ChangeNotifier {
     }
 
     if (messageId != null &&
-        !_notifications.any((n) => n['message']?['_id'] == messageId)) {
+        _notifications.any((n) => n['message']?['_id'] == messageId)) {
+      debugPrint(
+          '[NotificationProvider] Duplicate notification skipped: $messageId');
+      return;
+    }
+
+    if (messageId != null) {
       _notifications.add({
         ...notification,
         'message': {
           ...notification['message'],
-          'listOfFiles': listOfFiles, // Ensure listOfFiles is included
+          'listOfFiles': listOfFiles,
         },
       });
       _unreadCount++;
@@ -55,7 +59,7 @@ class NotificationProvider extends ChangeNotifier {
       notifyListeners();
     } else {
       debugPrint(
-          '[NotificationProvider] Duplicate or invalid notification skipped');
+          '[NotificationProvider] Invalid notification skipped: no messageId');
     }
   }
 

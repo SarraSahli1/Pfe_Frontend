@@ -7,9 +7,9 @@ import 'package:helpdeskfrontend/services/config.dart';
 import 'package:helpdeskfrontend/services/equipement_service.dart';
 import 'package:helpdeskfrontend/services/user_service.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
+import 'package:helpdeskfrontend/widgets/navbar_admin.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
 import 'package:provider/provider.dart';
 
 class UserDetailsScreen extends StatefulWidget {
@@ -29,10 +29,9 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
   List<dynamic> _userEquipment = [];
   bool _isLoadingEquipment = false;
   bool _isLoadingUserEquipment = false;
-  bool _showEquipmentCard =
-      false; // New state variable to toggle equipment card
   String? _equipmentError;
   String? _userEquipmentError;
+  bool _showDetails = true;
 
   @override
   void initState() {
@@ -314,405 +313,14 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
         : 'N/A';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
-    final screenHeight = MediaQuery.of(context).size.height;
-
-    return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF242E3E) : Colors.white,
-      appBar: AppBar(
-        centerTitle: true,
-        title: Text(
-          'User Details',
-          style: GoogleFonts.inter(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        backgroundColor: isDarkMode
-            ? Colors.black
-            : const Color.fromRGBO(133, 171, 250, 1.0),
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: const [
-          ThemeToggleButton(),
-        ],
-      ),
-      body: FutureBuilder<User>(
-        future: _futureUser,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: CircularProgressIndicator(
-                color: isDarkMode
-                    ? Colors.white
-                    : const Color.fromRGBO(133, 171, 250, 1.0),
-              ),
-            );
-          } else if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Error: ${snapshot.error}',
-                style: TextStyle(
-                  color: isDarkMode ? Colors.white : Colors.black,
-                ),
-              ),
-            );
-          } else if (!snapshot.hasData || snapshot.data == null) {
-            return Center(
-              child: Text(
-                'No user data found',
-                style: TextStyle(
-                  color: isDarkMode ? Colors.white : Colors.black,
-                ),
-              ),
-            );
-          } else {
-            final user = snapshot.data!;
-            final profileImageUrl = _getImageUrl(user.image) ??
-                'https://placehold.co/200x200/4299e1/4299e1';
-
-            return Column(
-              children: [
-                // Profile Header
-                Container(
-                  height: screenHeight / 4,
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? const Color(0xFF1A2232)
-                        : const Color.fromRGBO(133, 171, 250, 1.0),
-                    borderRadius: const BorderRadius.only(
-                      bottomLeft: Radius.circular(30),
-                      bottomRight: Radius.circular(30),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          width: 120,
-                          height: 120,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(width: 0),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(60),
-                            child: Image.network(
-                              profileImageUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Icon(
-                                  Icons.person_outline,
-                                  size: 60,
-                                  color: isDarkMode
-                                      ? Colors.white
-                                      : Colors.grey[600],
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Text(
-                          '${user.firstName ?? "N/A"} ${user.lastName ?? "N/A"}',
-                          style: GoogleFonts.inter(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          user.authority ?? 'N/A',
-                          style: GoogleFonts.inter(
-                            fontSize: 16,
-                            fontWeight: FontWeight.normal,
-                            color: Colors.white.withOpacity(0.8),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Details Section
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Email
-                        if (user.email != null || user.secondEmail != null) ...[
-                          Text(
-                            'Email',
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDarkMode ? Colors.white : Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _buildDetailItem(
-                            Icons.email_outlined,
-                            'Official',
-                            user.email ?? 'N/A',
-                            isDarkMode,
-                          ),
-                          if (user.secondEmail != null)
-                            _buildDetailItem(
-                              Icons.email_outlined,
-                              'Personal',
-                              user.secondEmail!,
-                              isDarkMode,
-                            ),
-                          const Divider(height: 30),
-                        ],
-                        // Phone
-                        _buildDetailItem(
-                          Icons.phone_outlined,
-                          'Phone',
-                          user.phoneNumber ?? 'N/A',
-                          isDarkMode,
-                        ),
-                        const Divider(height: 30),
-                        // Technician Specific Details
-                        if (user.authority == 'technician') ...[
-                          _buildDetailItem(
-                            Icons.drive_eta_outlined,
-                            'Driver\'s License',
-                            user.permisConduire ? 'Yes' : 'No',
-                            isDarkMode,
-                          ),
-                          const Divider(height: 30),
-                          _buildDetailItem(
-                            Icons.airplanemode_active_outlined,
-                            'Passport',
-                            user.passeport ? 'Yes' : 'No',
-                            isDarkMode,
-                          ),
-                          const Divider(height: 30),
-                          _buildDetailItem(
-                            Icons.cake_outlined,
-                            'Birth Date',
-                            _formatDate(user.birthDate),
-                            isDarkMode,
-                          ),
-                          const Divider(height: 30),
-                          // Signature
-                          Text(
-                            'Signature',
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isDarkMode ? Colors.white : Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _buildSignatureWidget(
-                              _getSignatureUrl(user.signature)),
-                          const SizedBox(height: 20),
-                        ],
-                        // Client Specific Details
-                        if (user.authority == 'client') ...[
-                          _buildDetailItem(
-                            Icons.business_outlined,
-                            'Company',
-                            user.company ?? 'N/A',
-                            isDarkMode,
-                          ),
-                          const Divider(height: 30),
-                          _buildDetailItem(
-                            Icons.info_outlined,
-                            'About',
-                            user.about ?? 'N/A',
-                            isDarkMode,
-                          ),
-                          const Divider(height: 30),
-                        ],
-                        // Assign Equipment Button
-                        ElevatedButton(
-                          onPressed: () {
-                            _showAssignEquipmentDialog();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                isDarkMode ? Colors.blue[800] : Colors.blue,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 20, vertical: 12),
-                          ),
-                          child: const Text(
-                            'Assign Equipment',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        // View Equipment Button
-                        Semantics(
-                          label: 'Toggle assigned equipment list',
-                          child: ElevatedButton(
-                            onPressed: () {
-                              setState(() {
-                                _showEquipmentCard = !_showEquipmentCard;
-                              });
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  isDarkMode ? Colors.blue[800] : Colors.blue,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 20, vertical: 12),
-                            ),
-                            child: Text(
-                              _showEquipmentCard
-                                  ? 'Hide Equipment'
-                                  : 'View Equipment',
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        // Equipment Card
-                        AnimatedOpacity(
-                          opacity: _showEquipmentCard ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: Visibility(
-                            visible: _showEquipmentCard,
-                            child: Card(
-                              elevation: 4,
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              color: isDarkMode
-                                  ? const Color(0xFF2D3748)
-                                  : Colors.white,
-                              child: Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Assigned Equipment',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: isDarkMode
-                                            ? Colors.white
-                                            : Colors.black,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    _isLoadingUserEquipment
-                                        ? const Center(
-                                            child: CircularProgressIndicator())
-                                        : _userEquipmentError != null
-                                            ? Text(
-                                                'Error: $_userEquipmentError',
-                                                style: const TextStyle(
-                                                    color: Colors.red),
-                                              )
-                                            : _userEquipment.isEmpty
-                                                ? Text(
-                                                    'No equipment assigned',
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 14,
-                                                      color: isDarkMode
-                                                          ? Colors.white70
-                                                          : Colors.black54,
-                                                    ),
-                                                  )
-                                                : ListView.builder(
-                                                    shrinkWrap: true,
-                                                    physics:
-                                                        const NeverScrollableScrollPhysics(),
-                                                    itemCount:
-                                                        _userEquipment.length,
-                                                    itemBuilder:
-                                                        (context, index) {
-                                                      final equipment =
-                                                          _userEquipment[index];
-                                                      return ListTile(
-                                                        leading: Icon(
-                                                          Icons.devices_other,
-                                                          size: 24,
-                                                          color: isDarkMode
-                                                              ? Colors.white70
-                                                              : Colors
-                                                                  .blue[600],
-                                                        ),
-                                                        title: Text(
-                                                          equipment[
-                                                                  'designation'] ??
-                                                              'No designation',
-                                                          style:
-                                                              GoogleFonts.inter(
-                                                            fontSize: 16,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .normal,
-                                                            color: isDarkMode
-                                                                ? Colors.white
-                                                                : Colors.black,
-                                                          ),
-                                                        ),
-                                                        subtitle: Text(
-                                                          equipment[
-                                                                  'serialNumber'] ??
-                                                              'No serial number',
-                                                          style:
-                                                              GoogleFonts.inter(
-                                                            fontSize: 14,
-                                                            color: isDarkMode
-                                                                ? Colors.white70
-                                                                : Colors
-                                                                    .black54,
-                                                          ),
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            );
-          }
-        },
-      ),
-    );
-  }
-
-  Widget _buildDetailItem(
-      IconData icon, String label, String value, bool isDarkMode) {
+  Widget _buildDetailItem(IconData icon, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(
           icon,
           size: 20,
-          color: isDarkMode ? Colors.white : Colors.black,
+          color: const Color(0xFF628ff6),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -732,13 +340,471 @@ class _UserDetailsScreenState extends State<UserDetailsScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   fontWeight: FontWeight.normal,
-                  color: isDarkMode ? Colors.white : Colors.black,
+                  color: Colors.black,
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildDetailsSection(Future<User> futureUser) {
+    return FutureBuilder<User>(
+      future: futureUser,
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        final user = snapshot.data!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (user.email != null || user.secondEmail != null) ...[
+              const SizedBox(height: 10),
+              _buildDetailItem(
+                Icons.email_outlined,
+                'Email',
+                user.email ?? 'N/A',
+              ),
+              if (user.secondEmail != null)
+                _buildDetailItem(
+                  Icons.email_outlined,
+                  'Personal',
+                  user.secondEmail!,
+                ),
+              const Divider(height: 30, color: Colors.grey),
+            ],
+            _buildDetailItem(
+              Icons.phone_outlined,
+              'Phone',
+              user.phoneNumber ?? 'N/A',
+            ),
+            const Divider(height: 30, color: Colors.grey),
+            if (user.authority == 'technician') ...[
+              _buildDetailItem(
+                Icons.drive_eta_outlined,
+                'Driver\'s License',
+                user.permisConduire ? 'Yes' : 'No',
+              ),
+              const Divider(height: 30, color: Colors.grey),
+              _buildDetailItem(
+                Icons.airplanemode_active_outlined,
+                'Passport',
+                user.passeport ? 'Yes' : 'No',
+              ),
+              const Divider(height: 30, color: Colors.grey),
+              _buildDetailItem(
+                Icons.cake_outlined,
+                'Birth Date',
+                _formatDate(user.birthDate),
+              ),
+              const Divider(height: 30, color: Colors.grey),
+              Text(
+                'Signature',
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _buildSignatureWidget(_getSignatureUrl(user.signature)),
+              const SizedBox(height: 20),
+            ],
+            if (user.authority == 'client') ...[
+              _buildDetailItem(
+                Icons.business_outlined,
+                'Company',
+                user.company ?? 'N/A',
+              ),
+              const Divider(height: 30, color: Colors.grey),
+              _buildDetailItem(
+                Icons.info_outlined,
+                'About',
+                user.about ?? 'N/A',
+              ),
+              const Divider(height: 30, color: Colors.grey),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildEquipmentSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Center(
+          child: ElevatedButton(
+            onPressed: () {
+              _showAssignEquipmentDialog();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF628ff6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: const Text(
+              'Assign Equipment',
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _isLoadingUserEquipment
+            ? const Center(child: CircularProgressIndicator())
+            : _userEquipmentError != null
+                ? Text(
+                    'Error: $_userEquipmentError',
+                    style: const TextStyle(color: Colors.red),
+                  )
+                : _userEquipment.isEmpty
+                    ? Text(
+                        'No equipment assigned',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: Colors.black54,
+                        ),
+                      )
+                    : ListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: _userEquipment.length,
+                        itemBuilder: (context, index) {
+                          final equipment = _userEquipment[index];
+                          return ListTile(
+                            leading: Icon(
+                              Icons.devices_other,
+                              size: 24,
+                              color: const Color(0xFF628ff6),
+                            ),
+                            title: Text(
+                              equipment['designation'] ?? 'No designation',
+                              style: GoogleFonts.inter(
+                                fontSize: 16,
+                                fontWeight: FontWeight.normal,
+                                color: Colors.black,
+                              ),
+                            ),
+                            subtitle: Text(
+                              equipment['serialNumber'] ?? 'No serial number',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                color: Colors.black54,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text(
+          'User Details',
+          style: GoogleFonts.inter(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: const Color(0xFF628ff6),
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: const [
+          ThemeToggleButton(),
+        ],
+        elevation: 0,
+      ),
+      body: Column(
+        children: [
+          // Blue Top Section
+          Container(
+            color: const Color(0xFF628ff6),
+            width: double.infinity,
+            child: FutureBuilder<User>(
+              future: _futureUser,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                    ),
+                  );
+                } else if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error: ${snapshot.error}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                      ),
+                    ),
+                  );
+                } else if (!snapshot.hasData || snapshot.data == null) {
+                  return Center(
+                    child: Text(
+                      'No user data found',
+                      style: const TextStyle(
+                        color: Colors.white,
+                      ),
+                    ),
+                  );
+                } else {
+                  final user = snapshot.data!;
+                  final profileImageUrl = _getImageUrl(user.image) ??
+                      'https://placehold.co/200x200/ffffff/628ff6?text=${user.firstName?.substring(0, 1)}${user.lastName?.substring(0, 1)}';
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 120,
+                            height: 120,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white,
+                                width: 2,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(60),
+                              child: Image.network(
+                                profileImageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return Icon(
+                                    Icons.person_outline,
+                                    size: 60,
+                                    color: Colors.white,
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          Text(
+                            '${user.firstName ?? "N/A"} ${user.lastName ?? "N/A"}',
+                            style: GoogleFonts.inter(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            user.authority ?? 'N/A',
+                            style: GoogleFonts.inter(
+                              fontSize: 16,
+                              fontWeight: FontWeight.normal,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+          // White Bottom Section with Binder Tabs
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Binder Tabs
+                  Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFf5f5f5),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // Details Tab
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _showDetails = true),
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 4),
+                              decoration: BoxDecoration(
+                                color: _showDetails
+                                    ? Colors.white
+                                    : const Color(0xFFf5f5f5),
+                                borderRadius: const BorderRadius.only(
+                                  topLeft: Radius.circular(20),
+                                ),
+                                boxShadow: _showDetails
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    child: Container(
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: _showDetails
+                                            ? Colors.white
+                                            : Colors.transparent,
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(20),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Details',
+                                      style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
+                                        color: _showDetails
+                                            ? const Color(0xFF628ff6)
+                                            : Colors.black54,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Equipment Tab
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _showDetails = false),
+                            child: Container(
+                              margin: const EdgeInsets.only(left: 4),
+                              decoration: BoxDecoration(
+                                color: !_showDetails
+                                    ? Colors.white
+                                    : const Color(0xFFf5f5f5),
+                                borderRadius: const BorderRadius.only(
+                                  topRight: Radius.circular(20),
+                                ),
+                                boxShadow: !_showDetails
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    child: Container(
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color: !_showDetails
+                                            ? Colors.white
+                                            : Colors.transparent,
+                                        borderRadius: const BorderRadius.only(
+                                          topRight: Radius.circular(20),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Center(
+                                    child: Text(
+                                      'Equipment',
+                                      style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 16,
+                                        color: !_showDetails
+                                            ? const Color(0xFF628ff6)
+                                            : Colors.black54,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Content Area (Page)
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(20),
+                          bottomRight: Radius.circular(20),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(20),
+                        child: _showDetails
+                            ? _buildDetailsSection(
+                                Future.value(_futureUser).then((user) => user))
+                            : _buildEquipmentSection(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: NavbarAdmin(currentIndex: 2, context: context),
     );
   }
 }

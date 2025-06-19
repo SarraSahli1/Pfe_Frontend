@@ -1,15 +1,14 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
-import 'package:helpdeskfrontend/screens/First_Screens/signin_screen.dart';
 import 'package:helpdeskfrontend/theme/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
 
 class ResetPasswordScreen extends StatefulWidget {
-  final String token;
-
-  const ResetPasswordScreen({super.key, required this.token});
+  final String email; // Email passé depuis ForgotPasswordScreen
+  const ResetPasswordScreen({super.key, required this.email});
 
   @override
   State<ResetPasswordScreen> createState() => _ResetPasswordScreenState();
@@ -17,46 +16,136 @@ class ResetPasswordScreen extends StatefulWidget {
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _codeController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController =
-      TextEditingController();
   final AuthService _authService = AuthService();
-  bool _isMounted = false;
+  bool _isLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
     super.initState();
-    _isMounted = true;
+    _emailController.text = widget.email; // Pré-remplir l'email
   }
 
   @override
   void dispose() {
-    _isMounted = false;
+    _emailController.dispose();
+    _codeController.dispose();
     _passwordController.dispose();
-    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleResetPassword() async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final result = await _authService.resetPassword(
-      token: widget.token,
-      newPassword: _passwordController.text.trim(),
-    );
+    setState(() {
+      _isLoading = true;
+    });
 
-    if (!_isMounted) return;
+    final email = _emailController.text.trim();
+    final code = _codeController.text.trim();
+    final newPassword = _passwordController.text.trim();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result['message'])),
-    );
-
-    if (result['success']) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SignInScreen()),
+    try {
+      final result = await _authService.resetPassword(
+        email: email,
+        code: code,
+        newPassword: newPassword,
       );
+
+      if (!mounted) return;
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['success']
+              ? 'Mot de passe réinitialisé avec succès !'
+              : result['message'] ?? 'Erreur inconnue'),
+          backgroundColor: result['success'] ? Colors.green : Colors.red,
+        ),
+      );
+
+      if (result['success']) {
+        // Naviguer vers SignInScreen après succès
+        Navigator.pushReplacementNamed(context, '/sign-in');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur réseau : $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
+  }
+
+  Widget _buildTextField({
+    required String label,
+    required TextEditingController controller,
+    required String? Function(String?) validator,
+    required IconData icon,
+    required Color hintColor,
+    required Color textColor,
+    required Color backgroundColor,
+    bool obscureText = false,
+    VoidCallback? onSuffixTap,
+    IconData? suffixIcon,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20.0),
+      child: Row(
+        children: [
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              obscureText: obscureText,
+              style: GoogleFonts.poppins(
+                color: textColor,
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              validator: validator,
+              decoration: InputDecoration(
+                prefixIcon: Icon(icon, color: hintColor),
+                suffixIcon: suffixIcon != null
+                    ? IconButton(
+                        icon: Icon(suffixIcon, color: hintColor),
+                        onPressed: onSuffixTap,
+                      )
+                    : null,
+                labelText: label,
+                labelStyle: GoogleFonts.poppins(
+                  color: hintColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w400,
+                ),
+                filled: true,
+                fillColor: backgroundColor,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 15,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -65,31 +154,67 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     final colorScheme = themeProvider.themeMode == ThemeMode.dark
         ? darkColorScheme
         : lightColorScheme;
+
     final textColor = themeProvider.themeMode == ThemeMode.dark
         ? colorScheme.onPrimary
         : Colors.black;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Réinitialiser le mot de passe')),
+      appBar: AppBar(
+        title: const Text('Réinitialiser le mot de passe'),
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
           child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              TextFormField(
+              const Text(
+                'Entrez le code reçu par email et votre nouveau mot de passe',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 20),
+              _buildTextField(
+                label: 'Email',
+                controller: _emailController,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Veuillez entrer votre email';
+                  }
+                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                      .hasMatch(value)) {
+                    return 'Email invalide';
+                  }
+                  return null;
+                },
+                icon: Icons.email,
+                hintColor: textColor.withOpacity(0.8),
+                textColor: textColor,
+                backgroundColor: colorScheme.surface,
+              ),
+              _buildTextField(
+                label: 'Code de vérification',
+                controller: _codeController,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Veuillez entrer le code';
+                  }
+                  if (value.length != 6 ||
+                      !RegExp(r'^\d{6}$').hasMatch(value)) {
+                    return 'Le code doit être 6 chiffres';
+                  }
+                  return null;
+                },
+                icon: Icons.vpn_key,
+                hintColor: textColor.withOpacity(0.8),
+                textColor: textColor,
+                backgroundColor: colorScheme.surface,
+              ),
+              _buildTextField(
+                label: 'Nouveau mot de passe',
                 controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'Nouveau mot de passe',
-                  labelStyle: GoogleFonts.poppins(color: textColor),
-                  filled: true,
-                  fillColor: colorScheme.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Veuillez entrer un mot de passe';
@@ -99,49 +224,43 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                   }
                   return null;
                 },
-              ),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _confirmPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  labelText: 'Confirmer le mot de passe',
-                  labelStyle: GoogleFonts.poppins(color: textColor),
-                  filled: true,
-                  fillColor: colorScheme.surface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Veuillez confirmer le mot de passe';
-                  }
-                  if (value != _passwordController.text) {
-                    return 'Les mots de passe ne correspondent pas';
-                  }
-                  return null;
+                icon: Icons.lock,
+                hintColor: textColor.withOpacity(0.8),
+                textColor: textColor,
+                backgroundColor: colorScheme.surface,
+                obscureText: _obscurePassword,
+                suffixIcon:
+                    _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                onSuffixTap: () {
+                  setState(() {
+                    _obscurePassword = !_obscurePassword;
+                  });
                 },
               ),
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _handleResetPassword,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3D5CFF),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+              Container(
+                width: double.infinity,
+                height: 50,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF3D5CFF), Color(0xFF2541CC)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  minimumSize: const Size(double.infinity, 50),
                 ),
-                child: Text(
-                  'Réinitialiser',
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                child: TextButton(
+                  onPressed: _isLoading ? null : _submit,
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text(
+                          'Réinitialiser',
+                          style: GoogleFonts.poppins(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                 ),
               ),
             ],

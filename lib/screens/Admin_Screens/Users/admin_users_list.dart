@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:helpdeskfrontend/models/user.dart';
 import 'package:helpdeskfrontend/provider/theme_provider.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Users/edit_user.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Users/pending_users_screen.dart';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:helpdeskfrontend/widgets/navbar_admin.dart';
 import 'package:provider/provider.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Users/user_details.dart';
@@ -199,8 +201,7 @@ class _AdminUsersState extends State<AdminUsersList> {
                             } else {
                               final fileInfo = fileSnapshot.data!['rows'];
                               final imageUrl = fileInfo['path'].replaceFirst(
-                                  'http://localhost:3000',
-                                  'http://192.168.1.18:3000');
+                                  'http://localhost:3000', Config.baseUrl);
                               return UserCard(
                                 name:
                                     '${user['firstName']} ${user['lastName']}',
@@ -211,6 +212,8 @@ class _AdminUsersState extends State<AdminUsersList> {
                                 userEmail: user['email'],
                                 userService: _userService,
                                 themeProvider: themeProvider,
+                                isSelected:
+                                    false, // Ajout de la propriété isSelected
                               );
                             }
                           },
@@ -225,40 +228,66 @@ class _AdminUsersState extends State<AdminUsersList> {
         ),
       ),
       bottomNavigationBar: NavbarAdmin(
-        currentIndex: 1, // Index fixe pour cette page
-        context: context, // Contexte passé pour la navigation
+        currentIndex: 1,
+        context: context,
       ),
     );
   }
 
   Widget _buildFilterButton(String label, String role) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
-    return GestureDetector(
-      onTap: () => setState(() => _selectedRole = role),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: _selectedRole == role ? Colors.blue : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _selectedRole = role),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
               color: _selectedRole == role
-                  ? Colors.blue
-                  : themeProvider.themeMode == ThemeMode.dark
-                      ? Colors.white
-                      : Colors.black),
-        ),
-        child: Text(label,
-            style: TextStyle(
+                  ? isDarkMode
+                      ? Colors.blue.shade800
+                      : Colors.blue
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _selectedRole == role
+                    ? isDarkMode
+                        ? Colors.blue.shade600
+                        : Colors.blue
+                    : isDarkMode
+                        ? Colors.white
+                        : Colors.black,
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
                 color: _selectedRole == role
                     ? Colors.white
-                    : themeProvider.themeMode == ThemeMode.dark
+                    : isDarkMode
                         ? Colors.white
                         : Colors.black,
                 fontSize: 14,
                 fontFamily: 'Poppins',
-                fontWeight: FontWeight.w500)),
-      ),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        // Indicateur de sélection sous le bouton
+        if (_selectedRole == role)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            height: 3,
+            width: 40,
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.blue.shade600 : Colors.blue,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -444,6 +473,7 @@ class UserCard extends StatelessWidget {
   final String userEmail;
   final UserService userService;
   final ThemeProvider themeProvider;
+  final bool isSelected;
 
   const UserCard({
     Key? key,
@@ -455,201 +485,222 @@ class UserCard extends StatelessWidget {
     required this.userEmail,
     required this.userService,
     required this.themeProvider,
+    this.isSelected = false,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
+
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: themeProvider.themeMode == ThemeMode.dark
-            ? Colors.white.withOpacity(0.1)
-            : const Color(0xFFe7eefe),
-        borderRadius: BorderRadius.circular(12),
+        border: isSelected
+            ? Border(
+                left: BorderSide(
+                  color: isDarkMode ? Colors.blue.shade600 : Colors.blue,
+                  width: 4,
+                ),
+              )
+            : null,
       ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundImage: NetworkImage(imageUrl),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => UserDetailsScreen(userId: userId),
+              ),
+            );
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: isDarkMode
+                  ? isSelected
+                      ? Colors.blue.shade900.withOpacity(0.3)
+                      : Colors.white.withOpacity(0.1)
+                  : isSelected
+                      ? Colors.blue.shade100
+                      : const Color(0xFFe7eefe),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
               children: [
-                Text(name,
-                    style: TextStyle(
-                        color: themeProvider.themeMode == ThemeMode.dark
-                            ? Colors.white
-                            : Colors.black,
-                        fontSize: 14,
-                        fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w500)),
-                Text(email,
-                    style: TextStyle(
-                        color: themeProvider.themeMode == ThemeMode.dark
-                            ? const Color(0xFFB8B8D2)
-                            : Colors.grey[700],
-                        fontSize: 12,
-                        fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w400)),
-                Text('Rôle: $role',
-                    style: TextStyle(
-                        color: themeProvider.themeMode == ThemeMode.dark
-                            ? Colors.lightBlue
-                            : Colors.blue,
-                        fontSize: 12,
-                        fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w700)),
+                CircleAvatar(
+                  radius: 30,
+                  backgroundImage: NetworkImage(imageUrl),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name,
+                          style: TextStyle(
+                              color: isDarkMode ? Colors.white : Colors.black,
+                              fontSize: 14,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w500)),
+                      Text(email,
+                          style: TextStyle(
+                              color: isDarkMode
+                                  ? const Color(0xFFB8B8D2)
+                                  : Colors.grey[700],
+                              fontSize: 12,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w400)),
+                      Text('Rôle: $role',
+                          style: TextStyle(
+                              color:
+                                  isDarkMode ? Colors.lightBlue : Colors.blue,
+                              fontSize: 12,
+                              fontFamily: 'Poppins',
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert,
+                      color: isDarkMode ? Colors.white : Colors.black,
+                      size: 24),
+                  onSelected: (String value) async {
+                    switch (value) {
+                      case 'edit':
+                        final User user = await userService.getUserById(userId);
+                        final Map<String, dynamic> userData = user.toMap();
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => EditUserScreen(
+                              userId: userId,
+                              userData: userData,
+                            ),
+                          ),
+                        );
+                        break;
+                      case 'delete':
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: Text('Delete User'),
+                            content: Text(
+                                'Are you sure you want to delete this user?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: Text('Delete'),
+                              ),
+                            ],
+                          ),
+                        );
+
+                        if (confirmed == true) {
+                          try {
+                            final response =
+                                await userService.deleteUser(userEmail);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text(response['message'])),
+                            );
+
+                            if (context.mounted) {
+                              final adminUsersListState = context
+                                  .findAncestorStateOfType<_AdminUsersState>();
+                              adminUsersListState?.refreshUserList();
+                            }
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text('Error deleting user: $e')),
+                            );
+                          }
+                        }
+                        break;
+                      case 'see':
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                UserDetailsScreen(userId: userId),
+                          ),
+                        );
+                        break;
+                    }
+                  },
+                  itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<String>>[
+                    PopupMenuItem<String>(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit,
+                              color: isDarkMode ? Colors.white : Colors.black,
+                              size: 18),
+                          const SizedBox(width: 8),
+                          Text('Edit',
+                              style: TextStyle(
+                                  color:
+                                      isDarkMode ? Colors.white : Colors.black,
+                                  fontSize: 12,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete,
+                              color: isDarkMode ? Colors.white : Colors.black,
+                              size: 18),
+                          const SizedBox(width: 8),
+                          Text('Delete',
+                              style: TextStyle(
+                                  color:
+                                      isDarkMode ? Colors.white : Colors.black,
+                                  fontSize: 12,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem<String>(
+                      value: 'see',
+                      child: Row(
+                        children: [
+                          Icon(Icons.visibility,
+                              color: isDarkMode ? Colors.white : Colors.black,
+                              size: 18),
+                          const SizedBox(width: 8),
+                          Text('See',
+                              style: TextStyle(
+                                  color:
+                                      isDarkMode ? Colors.white : Colors.black,
+                                  fontSize: 12,
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w500)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  color: isDarkMode ? const Color(0xFF242E3E) : Colors.white,
+                ),
               ],
             ),
           ),
-          PopupMenuButton<String>(
-            icon: Icon(Icons.more_vert,
-                color: themeProvider.themeMode == ThemeMode.dark
-                    ? Colors.white
-                    : Colors.black,
-                size: 24),
-            onSelected: (String value) async {
-              switch (value) {
-                case 'edit':
-                  final User user = await userService.getUserById(userId);
-                  final Map<String, dynamic> userData = user.toMap();
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => EditUserScreen(
-                        userId: userId,
-                        userData: userData,
-                      ),
-                    ),
-                  );
-                  break;
-                case 'delete':
-                  final confirmed = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: Text('Delete User'),
-                      content:
-                          Text('Are you sure you want to delete this user?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: Text('Cancel'),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirmed == true) {
-                    try {
-                      final response = await userService.deleteUser(userEmail);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(response['message'])),
-                      );
-
-                      if (context.mounted) {
-                        final adminUsersListState =
-                            context.findAncestorStateOfType<_AdminUsersState>();
-                        adminUsersListState?.refreshUserList();
-                      }
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error deleting user: $e')),
-                      );
-                    }
-                  }
-                  break;
-                case 'see':
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => UserDetailsScreen(userId: userId),
-                    ),
-                  );
-                  break;
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              PopupMenuItem<String>(
-                value: 'edit',
-                child: Row(
-                  children: [
-                    Icon(Icons.edit,
-                        color: themeProvider.themeMode == ThemeMode.dark
-                            ? Colors.white
-                            : Colors.black,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Text('Edit',
-                        style: TextStyle(
-                            color: themeProvider.themeMode == ThemeMode.dark
-                                ? Colors.white
-                                : Colors.black,
-                            fontSize: 12,
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete,
-                        color: themeProvider.themeMode == ThemeMode.dark
-                            ? Colors.white
-                            : Colors.black,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Text('Delete',
-                        style: TextStyle(
-                            color: themeProvider.themeMode == ThemeMode.dark
-                                ? Colors.white
-                                : Colors.black,
-                            fontSize: 12,
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'see',
-                child: Row(
-                  children: [
-                    Icon(Icons.visibility,
-                        color: themeProvider.themeMode == ThemeMode.dark
-                            ? Colors.white
-                            : Colors.black,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Text('See',
-                        style: TextStyle(
-                            color: themeProvider.themeMode == ThemeMode.dark
-                                ? Colors.white
-                                : Colors.black,
-                            fontSize: 12,
-                            fontFamily: 'Poppins',
-                            fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-            ],
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            color: themeProvider.themeMode == ThemeMode.dark
-                ? const Color(0xFF242E3E)
-                : Colors.white,
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -13,11 +13,12 @@ class SocketService {
   bool _isConnecting = false;
   final List<Function(Map<String, dynamic>)> _notificationListeners = [];
   final List<String> _subscribedTickets = [];
+  final Set<String> _processedNotificationIds = {}; // Deduplication
   Function(bool)? onConnectionStatus;
   Timer? _reconnectTimer;
   String? _currentToken;
   Timer? _connectionChecker;
-  String? _activeTicketId; // Track active ChatScreen ticketId
+  String? _activeTicketId;
 
   bool get isConnected => _isConnected;
   factory SocketService() => _instance;
@@ -33,18 +34,19 @@ class SocketService {
     required String userId,
     Function(Map<String, dynamic>)? onNotification,
   }) {
-    debugPrint('[SOCKET] Initializing for user $userId');
-    if (this.userId != null && this.userId != userId) {
+    debugPrint(
+        '[SOCKET] Initializing for user $userId, instance: ${this.hashCode}');
+    if (_socket != null && this.userId != userId) {
       debugPrint(
-          '[SOCKET] User changed from ${this.userId} to $userId, resetting connection');
-      disconnect();
+          '[SOCKET] User changed from ${this.userId} to $userId, resetting');
+      dispose();
     }
     this.userId = userId;
     if (onNotification != null) {
       addNotificationListener(onNotification);
     }
 
-    _connectionChecker = Timer.periodic(const Duration(minutes: 1), (_) {
+    _connectionChecker ??= Timer.periodic(const Duration(minutes: 1), (_) {
       if (!_isConnected && !_isConnecting && _currentToken != null) {
         debugPrint('[SOCKET] Periodic connection check - reconnecting');
         connect(_currentToken!);
@@ -56,19 +58,19 @@ class SocketService {
     if (!_notificationListeners.contains(listener)) {
       _notificationListeners.add(listener);
       debugPrint(
-          '[SOCKET] Added notification listener, total: ${_notificationListeners.length}');
+          '[SOCKET] Added listener, total: ${_notificationListeners.length}');
     }
   }
 
   void removeNotificationListener(Function(Map<String, dynamic>) listener) {
     _notificationListeners.remove(listener);
     debugPrint(
-        '[SOCKET] Removed notification listener, total: ${_notificationListeners.length}');
+        '[SOCKET] Removed listener, total: ${_notificationListeners.length}');
   }
 
   Future<void> connect(String token) async {
     if (_isConnected || _isConnecting) {
-      debugPrint('[SOCKET] Already connected or connecting, skipping');
+      debugPrint('[SOCKET] Already connected or connecting');
       return;
     }
 
@@ -114,10 +116,16 @@ class SocketService {
   void _setupSocketEvents() {
     if (_socket == null) return;
 
+    // Clear existing listeners
+    _socket!.off('connect');
+    _socket!.off('disconnect');
+    _socket!.off('error');
+    _socket!.off('connect_error');
+
     _socket!.onConnect((_) {
       _isConnected = true;
       _isConnecting = false;
-      debugPrint('[SOCKET] Connected successfully. Socket ID: ${_socket!.id}');
+      debugPrint('[SOCKET] Connected. Socket ID: ${_socket!.id}');
       onConnectionStatus?.call(true);
       _cancelReconnect();
       _resubscribeToTickets();
@@ -146,6 +154,14 @@ class SocketService {
   }
 
   void _setupApplicationListeners() {
+    // Clear existing listeners
+    _socket!.off('new-chat-notification');
+    _socket!.off('ticket:update');
+    _socket!.off('user:notification');
+    _socket!.off('status-change');
+    _socket!.off('notification');
+    _socket!.off('chat-message');
+
     _socket!.on('new-chat-notification', (data) {
       try {
         debugPrint('[SOCKET] Raw notification data: $data');
@@ -185,12 +201,14 @@ class SocketService {
         final notification = {
           'event': 'user-notification',
           'type': 'status-change',
-          'ticketId': data['ticketId']?.toString() ?? data['_id']?.toString(),
+          'ticketId':
+              data['ticketId']?.toString() ?? data['_id']?.toString() ?? '',
           'message': {
-            '_id':
-                data['message']?['_id']?.toString() ?? data['_id']?.toString(),
-            'message':
-                data['message'] ?? 'Ticket status updated to ${data['status']}',
+            '_id': data['_id']?.toString() ?? '',
+            'message': data['message'] is String
+                ? data['message']
+                : data['message']?['message'] ??
+                    'Ticket status updated to ${data['status']}',
             'status': data['status'],
             'oldStatus': data['oldStatus'],
             'createdAt': data['createdAt'] ?? DateTime.now().toIso8601String(),
@@ -327,6 +345,17 @@ class SocketService {
     debugPrint(
         '[SOCKET] Handling $event with data: $data, activeTicketId: $_activeTicketId');
     if (!_isConnected && event != 'connection_status') return;
+
+    final notificationId = data['message']?['_id']?.toString() ?? '';
+    if (notificationId.isNotEmpty &&
+        _processedNotificationIds.contains(notificationId)) {
+      debugPrint('[SOCKET] Skipping duplicate notification: $notificationId');
+      return;
+    }
+    if (notificationId.isNotEmpty) {
+      _processedNotificationIds.add(notificationId);
+    }
+
     for (var listener in List.from(_notificationListeners)) {
       try {
         listener({...data, 'activeTicketId': _activeTicketId});
@@ -437,11 +466,15 @@ class SocketService {
     if (_reconnectTimer != null ||
         _isConnecting ||
         _isConnected ||
-        token == null) return;
+        token == null) {
+      debugPrint(
+          '[SOCKET] Reconnect skipped: already reconnecting or connected');
+      return;
+    }
 
     int retryCount = 0;
-    const maxRetries = 5;
-    const baseDelay = Duration(seconds: 5);
+    const maxRetries = 3;
+    const baseDelay = Duration(seconds: 10);
 
     debugPrint('[SOCKET] Starting reconnect attempts');
     _reconnectTimer = Timer.periodic(baseDelay, (timer) {
@@ -449,16 +482,19 @@ class SocketService {
         debugPrint('[SOCKET] Reconnect attempt ${retryCount + 1}/$maxRetries');
         connect(token);
         retryCount++;
-      } else if (retryCount >= maxRetries) {
-        debugPrint('[SOCKET] Max reconnect attempts reached');
+      } else {
+        debugPrint(
+            '[SOCKET] Stopping reconnect: ${retryCount >= maxRetries ? 'Max retries reached' : 'Connected or connecting'}');
         timer.cancel();
         _reconnectTimer = null;
-        onConnectionStatus?.call(false);
-        _handleEvent('connection_failed', {
-          'message':
-              'Failed to reconnect to chat server after $maxRetries attempts',
-          'activeTicketId': _activeTicketId,
-        });
+        if (!_isConnected) {
+          onConnectionStatus?.call(false);
+          _handleEvent('connection_failed', {
+            'message':
+                'Failed to reconnect to chat server after $maxRetries attempts',
+            'activeTicketId': _activeTicketId,
+          });
+        }
       }
     });
   }
@@ -481,6 +517,7 @@ class SocketService {
         onConnectionStatus!(false);
       }
       _subscribedTickets.clear();
+      _processedNotificationIds.clear();
       _activeTicketId = null;
     }
   }
@@ -490,6 +527,7 @@ class SocketService {
     disconnect();
     _notificationListeners.clear();
     _subscribedTickets.clear();
+    _processedNotificationIds.clear();
     _activeTicketId = null;
     debugPrint('[SOCKET] Service disposed');
   }
@@ -507,6 +545,7 @@ User ID: $userId
 Subscribed tickets: ${_subscribedTickets.join(', ')}
 Active ticketId: $_activeTicketId
 Active listeners: ${_notificationListeners.length}
+Processed notifications: ${_processedNotificationIds.length}
 Reconnect timer: ${_reconnectTimer != null ? 'Active' : 'Inactive'}
 ''');
   }

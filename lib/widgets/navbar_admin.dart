@@ -4,7 +4,6 @@ import 'package:helpdeskfrontend/screens/Admin_Screens/Solutions/solutions_list.
 import 'package:helpdeskfrontend/screens/Admin_Screens/Tickets/admin_tickets_list.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Users/admin_users_list.dart';
 import 'package:helpdeskfrontend/widgets/equipement_bottom_sheet.dart';
-// ... your other imports ...
 
 class NavbarAdmin extends StatelessWidget {
   final int
@@ -110,9 +109,7 @@ class NavbarAdmin extends StatelessWidget {
                 width: 60,
                 height: 60,
                 decoration: BoxDecoration(
-                  color: currentIndex == 0
-                      ? const Color(0xFF628ff6) // Active color
-                      : const Color(0xFFF79B72), // Inactive color
+                  color: const Color(0xFFF79B72), // Always orange
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: Colors.white,

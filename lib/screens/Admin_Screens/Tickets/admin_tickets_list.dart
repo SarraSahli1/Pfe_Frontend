@@ -124,11 +124,11 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
       case 'Not Assigned':
         return const Color.fromARGB(255, 235, 203, 129); // Light pastel yellow
       case 'Assigned':
-        return const Color(0xFFE0F7FA); // Light pastel blue
+        return const Color(0xFFD2DEFC); // Light blue
       case 'In Progress':
         return const Color(0xFFE3F2FD); // Pastel blue
       case 'Resolved':
-        return const Color(0xFFE8F5E9); // Light pastel green
+        return const Color(0xFFDEFCEF); // Light green
       case 'Closed':
         return const Color(0xFFE0F7F6); // Mint pastel
       case 'Expired':
@@ -165,118 +165,118 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
     final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
     return Scaffold(
-      extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
           'Tickets',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
-            color: isDarkMode ? Colors.white : Colors.black87,
+            color: Colors.white,
           ),
         ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: isDarkMode ? Colors.black : const Color(0xFF628ff6),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: const [
           ThemeToggleButton(),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDarkMode
-                ? [const Color(0xFF141218), const Color(0xFF242E3E)]
-                : [
-                    const Color(0xFF628FF6).withOpacity(0.8),
-                    const Color(0xFFF7F9F5)
-                  ],
-            stops: const [0.5, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Search tickets...',
-                      hintStyle: GoogleFonts.poppins(
-                          color:
-                              isDarkMode ? Colors.grey[400] : Colors.grey[600]),
-                      prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon:
-                                  const Icon(Icons.clear, color: Colors.orange),
-                              onPressed: () {
-                                _searchController.clear();
-                                _filterTickets();
-                              },
-                            )
-                          : null,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 24, vertical: 18),
-                    ),
-                    style: GoogleFonts.poppins(
-                        color: isDarkMode ? Colors.white : Colors.black),
-                  ),
+      backgroundColor: isDarkMode ? const Color(0xFF242E3E) : Colors.white,
+      body: RefreshIndicator(
+        onRefresh: _loadAllTickets,
+        color: Colors.orange,
+        child: _isLoading
+            ? Center(
+                child: CircularProgressIndicator(
+                  color: isDarkMode ? Colors.white : Colors.blue,
                 ),
-              ),
-              const SizedBox(height: 8),
-              _buildStatusFilterChips(isDarkMode),
-              const SizedBox(height: 8),
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: isDarkMode
-                        ? const Color(0xFF242E3E)
-                        : const Color(0xFFF7F9F5),
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(20)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
-                  ),
-                  child: RefreshIndicator(
-                    onRefresh: _loadAllTickets,
-                    color: Colors.orange,
-                    child: _buildTicketList(isDarkMode),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+              )
+            : _errorMessage.isNotEmpty
+                ? _buildError(_errorMessage, isDarkMode)
+                : _buildTicketListContent(isDarkMode),
       ),
       bottomNavigationBar: NavbarAdmin(currentIndex: 3, context: context),
     );
   }
 
-  Widget _buildStatusFilterChips(bool isDarkMode) {
+  Widget _buildTicketListContent(bool isDarkMode) {
+    final filteredTickets = _filterTicketsBySearch(
+      _filterTicketsByStatus(_tickets, _selectedStatus),
+      _searchQuery,
+    );
+
+    return SingleChildScrollView(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 480),
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 20),
+            _buildSearchBar(isDarkMode),
+            const SizedBox(height: 30),
+            _buildStatusFilterButtons(isDarkMode),
+            const SizedBox(height: 24),
+            filteredTickets.isEmpty
+                ? _buildEmptyState(isDarkMode)
+                : ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: filteredTickets.length,
+                    itemBuilder: (context, index) {
+                      final ticket = filteredTickets[index];
+                      return _buildTicketCard(ticket, isDarkMode);
+                    },
+                  ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(bool isDarkMode) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
+        borderRadius: BorderRadius.circular(25.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchController,
+        decoration: InputDecoration(
+          hintText: 'Search tickets...',
+          hintStyle: GoogleFonts.poppins(
+            color: isDarkMode ? Colors.white70 : Colors.grey[600],
+          ),
+          prefixIcon: Icon(
+            Icons.search,
+            color: isDarkMode ? Colors.white : Colors.grey[600],
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear, color: Colors.orange),
+                  onPressed: () {
+                    _searchController.clear();
+                    _filterTickets();
+                  },
+                )
+              : null,
+          border: InputBorder.none,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20.0, vertical: 15.0),
+        ),
+        style: GoogleFonts.poppins(
+          color: isDarkMode ? Colors.white : Colors.black,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatusFilterButtons(bool isDarkMode) {
     final statuses = [
       'all',
       'Not Assigned',
@@ -286,40 +286,81 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
       'Closed'
     ];
 
-    return SizedBox(
-      height: 50,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: statuses.length,
-        itemBuilder: (context, index) {
-          final status = statuses[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4.0),
-            child: ChoiceChip(
-              label: Text(
-                status == 'all' ? 'All' : status,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: _selectedStatus == status
-                      ? Colors.black87
-                      : isDarkMode
-                          ? Colors.white
-                          : Colors.black87,
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: statuses
+            .asMap()
+            .entries
+            .map((entry) {
+              final status = entry.value;
+              return [
+                _buildFilterButton(
+                  status == 'all' ? 'All' : status,
+                  status,
+                  isDarkMode,
                 ),
-              ),
-              selected: _selectedStatus == status,
-              selectedColor: _getStatusColor(status),
-              backgroundColor:
-                  isDarkMode ? const Color(0xFF3A4352) : Colors.grey[200],
-              onSelected: (selected) {
-                setState(() {
-                  _selectedStatus = selected ? status : 'all';
-                });
-              },
-            ),
-          );
-        },
+                if (entry.key < statuses.length - 1) const SizedBox(width: 20),
+              ];
+            })
+            .expand((element) => element)
+            .toList(),
       ),
+    );
+  }
+
+  Widget _buildFilterButton(String label, String status, bool isDarkMode) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
+
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () => setState(() => _selectedStatus = status),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: _selectedStatus == status
+                  ? isDarkMode
+                      ? Colors.blue.shade800
+                      : Colors.blue
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _selectedStatus == status
+                    ? isDarkMode
+                        ? Colors.blue.shade600
+                        : Colors.blue
+                    : isDarkMode
+                        ? Colors.white
+                        : Colors.black,
+              ),
+            ),
+            child: Text(
+              label,
+              style: GoogleFonts.poppins(
+                color: _selectedStatus == status
+                    ? Colors.white
+                    : isDarkMode
+                        ? Colors.white
+                        : Colors.black,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        if (_selectedStatus == status)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            height: 3,
+            width: 40,
+            decoration: BoxDecoration(
+              color: isDarkMode ? Colors.blue.shade600 : Colors.blue,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+      ],
     );
   }
 
@@ -356,14 +397,18 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.orange)),
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(
+              isDarkMode ? Colors.white : Colors.blue,
+            ),
+          ),
           const SizedBox(height: 16),
           Text(
             'Loading tickets...',
             style: GoogleFonts.poppins(
-                fontSize: 16,
-                color: isDarkMode ? Colors.white : Colors.grey[600]),
+              fontSize: 16,
+              color: isDarkMode ? Colors.white : Colors.grey[600],
+            ),
           ),
         ],
       ),
@@ -375,7 +420,11 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline, size: 50, color: Colors.red),
+          Icon(
+            Icons.error_outline,
+            size: 50,
+            color: isDarkMode ? Colors.white : Colors.red,
+          ),
           const SizedBox(height: 16),
           Text(
             'Loading Error',
@@ -395,7 +444,7 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
                 textAlign: TextAlign.center,
                 style: GoogleFonts.poppins(
                   fontSize: 14,
-                  color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                  color: isDarkMode ? Colors.white70 : Colors.grey[600],
                 ),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
@@ -408,7 +457,8 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
+                borderRadius: BorderRadius.circular(20),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             ),
             child: Text(
@@ -431,8 +481,8 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
         children: [
           Icon(
             Icons.assignment,
-            size: 60,
-            color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+            size: 100,
+            color: isDarkMode ? Colors.white : Colors.black,
           ),
           const SizedBox(height: 16),
           Text(
@@ -440,7 +490,7 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
             style: GoogleFonts.poppins(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : Colors.black87,
+              color: isDarkMode ? Colors.white : Colors.black,
             ),
           ),
           const SizedBox(height: 8),
@@ -450,7 +500,7 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
                 : 'No tickets match your search',
             style: GoogleFonts.poppins(
               fontSize: 14,
-              color: isDarkMode ? Colors.grey[400] : Colors.grey[600],
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
             ),
           ),
         ],
@@ -460,8 +510,7 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
 
   Widget _buildTicketCard(Ticket ticket, bool isDarkMode) {
     final clientName = _clientCache.containsKey(ticket.clientId)
-        ? '${_clientCache[ticket.clientId]?.firstName ?? ''} '
-            '${_clientCache[ticket.clientId]?.lastName ?? ''}'
+        ? '${_clientCache[ticket.clientId]?.firstName ?? ''} ${_clientCache[ticket.clientId]?.lastName ?? ''}'
         : 'Loading...';
 
     final statusColor = _getStatusColor(ticket.status);
@@ -473,7 +522,7 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(15.0),
       ),
-      color: statusColor, // Pastel color applied here
+      color: statusColor,
       child: InkWell(
         borderRadius: BorderRadius.circular(15.0),
         onTap: () {
@@ -581,8 +630,11 @@ class _AdminTicketsListPageState extends State<AdminTicketsListPage> {
                       )
                     else
                       IconButton(
-                        icon: Icon(Icons.refresh,
-                            size: 16, color: textColor.withOpacity(0.8)),
+                        icon: Icon(
+                          Icons.refresh,
+                          size: 16,
+                          color: textColor.withOpacity(0.8),
+                        ),
                         onPressed: () => _loadClientInfo(ticket.clientId),
                       ),
                   ],

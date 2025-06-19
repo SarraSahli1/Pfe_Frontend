@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:helpdeskfrontend/models/ticket.dart';
 import 'package:helpdeskfrontend/models/technicien.dart';
 import 'package:helpdeskfrontend/models/user.dart';
@@ -6,6 +7,9 @@ import 'package:helpdeskfrontend/services/equipement_service.dart';
 import 'package:helpdeskfrontend/services/ticket_service.dart';
 import 'package:helpdeskfrontend/services/technicien_service.dart';
 import 'package:helpdeskfrontend/services/user_service.dart';
+import 'package:helpdeskfrontend/provider/theme_provider.dart';
+import 'package:helpdeskfrontend/widgets/navbar_admin.dart';
+import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
 class AdminTicketDetailsPage extends StatefulWidget {
@@ -158,7 +162,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     }
   }
 
-  Widget _buildEquipmentItem(String equipmentId) {
+  Widget _buildEquipmentItem(String equipmentId, bool isDarkMode) {
     return FutureBuilder<Map<String, dynamic>>(
       future: _getEquipmentDetails(equipmentId),
       builder: (context, snapshot) {
@@ -179,7 +183,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Icon(
                 Icons.circle,
                 size: 8,
-                color: Theme.of(context).colorScheme.primary,
+                color: isDarkMode ? Colors.white : Colors.blue,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -188,20 +192,29 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                   children: [
                     Text(
                       displayText,
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                      ),
                     ),
                     if (snapshot.connectionState == ConnectionState.waiting)
-                      const SizedBox(
+                      SizedBox(
                         height: 2,
                         width: 100,
-                        child: LinearProgressIndicator(),
+                        child: LinearProgressIndicator(
+                          backgroundColor: Colors.grey.withOpacity(0.3),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isDarkMode ? Colors.white : Colors.blue,
+                          ),
+                        ),
                       ),
                     if (snapshot.hasError)
                       Text(
                         'Tapez pour réessayer',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.red,
+                        ),
                       ),
                   ],
                 ),
@@ -211,7 +224,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                   icon: Icon(
                     Icons.refresh,
                     size: 18,
-                    color: Theme.of(context).colorScheme.error,
+                    color: Colors.red,
                   ),
                   onPressed: () {
                     setState(() {
@@ -228,26 +241,39 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final themeProvider = Provider.of<ThemeProvider>(context);
+    final isDarkMode = themeProvider.themeMode == ThemeMode.dark;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Détails du Ticket'),
+        title: Text(
+          'Détails du Ticket',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
         centerTitle: true,
+        backgroundColor: isDarkMode ? Colors.black : const Color(0xFF628ff6),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
             tooltip: 'Actualiser',
+            color: Colors.white,
           ),
         ],
       ),
+      backgroundColor: isDarkMode ? const Color(0xFF242E3E) : Colors.white,
       body: FutureBuilder<Ticket>(
         future: _ticketFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(),
+            return Center(
+              child: CircularProgressIndicator(
+                color: isDarkMode ? Colors.white : Colors.blue,
+              ),
             );
           }
 
@@ -256,13 +282,20 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               child: ErrorWidget(
                 error: snapshot.error.toString(),
                 onRetry: _loadData,
+                isDarkMode: isDarkMode,
               ),
             );
           }
 
           if (!snapshot.hasData) {
-            return const Center(
-              child: Text('Aucune donnée de ticket disponible'),
+            return Center(
+              child: Text(
+                'Aucune donnée de ticket disponible',
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
+                  color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                ),
+              ),
             );
           }
 
@@ -270,138 +303,131 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
           return Column(
             children: [
               Expanded(
-                child: CustomScrollView(
-                  slivers: [
-                    SliverPadding(
-                      padding: const EdgeInsets.all(20),
-                      sliver: SliverList(
-                        delegate: SliverChildListDelegate(
-                          [
-                            _buildTicketHeader(ticket, theme),
-                            const SizedBox(height: 24),
-                            _buildClientSection(ticket, theme),
-                            const SizedBox(height: 24),
-                            _buildTicketDetailsSection(ticket, theme),
-                            if ((ticket.technicienIds ?? []).isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              _buildTechniciansSection(ticket, theme),
-                            ],
-                            if ((ticket.equipmentHardIds ?? []).isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              _buildEquipmentSection(
-                                'Matériel',
-                                ticket.equipmentHardIds!,
-                                Icons.computer,
-                                theme,
-                              ),
-                            ],
-                            if ((ticket.equipmentSoftIds ?? []).isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              _buildEquipmentSection(
-                                'Logiciel',
-                                ticket.equipmentSoftIds!,
-                                Icons.phone_android,
-                                theme,
-                              ),
-                            ],
-                            if ((ticket.fileUrls ?? []).isNotEmpty) ...[
-                              const SizedBox(height: 24),
-                              _buildAttachmentsSection(ticket, theme),
-                            ],
-                          ],
-                        ),
-                      ),
+                child: SingleChildScrollView(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 20),
+                        _buildTicketHeader(ticket, isDarkMode),
+                        const SizedBox(height: 24),
+                        _buildClientSection(ticket, isDarkMode),
+                        if ((ticket.technicienIds ?? []).isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildTechniciansSection(ticket, isDarkMode),
+                        ],
+                        if ((ticket.equipmentHardIds ?? []).isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildEquipmentSection(
+                            'Matériel',
+                            ticket.equipmentHardIds!,
+                            Icons.computer,
+                            isDarkMode,
+                          ),
+                        ],
+                        if ((ticket.equipmentSoftIds ?? []).isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildEquipmentSection(
+                            'Logiciel',
+                            ticket.equipmentSoftIds!,
+                            Icons.phone_android,
+                            isDarkMode,
+                          ),
+                        ],
+                        if ((ticket.fileUrls ?? []).isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          _buildAttachmentsSection(ticket, isDarkMode),
+                        ],
+                        const SizedBox(height: 24),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
               if (_shouldShowAssignButton(ticket))
-                _buildAssignTechnicianSection(theme),
+                _buildAssignTechnicianSection(isDarkMode),
             ],
           );
         },
       ),
+      bottomNavigationBar: NavbarAdmin(currentIndex: 3, context: context),
     );
   }
 
-  Widget _buildTicketHeader(Ticket ticket, ThemeData theme) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                ticket.title,
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onBackground,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _getStatusColor(ticket.status).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: _getStatusColor(ticket.status),
-                  width: 1.5,
-                ),
-              ),
-              child: Text(
-                ticket.status,
-                style: TextStyle(
-                  color: _getStatusColor(ticket.status),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'ID: ${ticket.id}',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withOpacity(0.6),
+  Widget _buildTicketHeader(Ticket ticket, bool isDarkMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           ),
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(12),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  ticket.title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: isDarkMode ? Colors.white : Colors.black87,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(ticket.status).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: _getStatusColor(ticket.status),
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  ticket.status,
+                  style: GoogleFonts.poppins(
+                    color: _getStatusColor(ticket.status),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
           ),
-          child: Column(
+          const SizedBox(height: 8),
+          Text(
+            'ID: ${ticket.id}',
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.description,
-                    size: 20,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Description',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                ticket.description,
-                style: theme.textTheme.bodyMedium,
-                maxLines: _isExpandedDescription ? null : 3,
-                overflow: _isExpandedDescription ? null : TextOverflow.ellipsis,
+              _DetailItem(
+                label: 'Description',
+                value: ticket.description,
+                icon: Icons.description,
+                isDarkMode: isDarkMode,
               ),
               if (ticket.description.length > 100) ...[
                 Align(
@@ -414,26 +440,49 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                     },
                     child: Text(
                       _isExpandedDescription ? 'Voir moins' : 'Voir plus',
-                      style: TextStyle(
-                        color: theme.colorScheme.primary,
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.blue,
                       ),
                     ),
                   ),
                 ),
               ],
+              const SizedBox(height: 16),
+              _DetailItem(
+                label: 'Type',
+                value: ticket.typeTicket,
+                icon: Icons.category,
+                isDarkMode: isDarkMode,
+              ),
+              _DetailItem(
+                label: 'Créé le',
+                value: DateFormat('dd MMM yyyy • HH:mm')
+                    .format(ticket.creationDate),
+                icon: Icons.calendar_today,
+                isDarkMode: isDarkMode,
+              ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildClientSection(Ticket ticket, ThemeData theme) {
-    return Container(
+  Widget _buildClientSection(Ticket ticket, bool isDarkMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -443,36 +492,64 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Icon(
                 Icons.person,
                 size: 20,
-                color: theme.colorScheme.primary,
+                color: isDarkMode ? Colors.white : Colors.blue,
               ),
               const SizedBox(width: 8),
               Text(
                 'Client',
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black87,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
           if (_isLoadingClient)
-            const Center(child: CircularProgressIndicator())
+            Center(
+              child: CircularProgressIndicator(
+                color: isDarkMode ? Colors.white : Colors.blue,
+              ),
+            )
           else if (_client == null)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Informations client non disponibles'),
+                Text(
+                  'Informations client non disponibles',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                  ),
+                ),
                 if (ticket.clientId.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
                     'ID Client: ${ticket.clientId}',
-                    style: theme.textTheme.bodySmall,
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                    ),
                   ),
                 ],
                 const SizedBox(height: 12),
                 OutlinedButton(
                   onPressed: () => _loadClientInfo(ticket.clientId),
-                  child: const Text('Réessayer'),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                        color: isDarkMode ? Colors.white : Colors.blue),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Réessayer',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      color: isDarkMode ? Colors.white : Colors.blue,
+                    ),
+                  ),
                 ),
               ],
             )
@@ -482,7 +559,11 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               children: [
                 Text(
                   '${_client!.firstName} ${_client!.lastName}',
-                  style: theme.textTheme.titleMedium,
+                  style: GoogleFonts.poppins(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : Colors.black87,
+                  ),
                 ),
                 if (_client!.email != null) ...[
                   const SizedBox(height: 8),
@@ -491,12 +572,15 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                       Icon(
                         Icons.email,
                         size: 16,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
                       ),
                       const SizedBox(width: 8),
                       Text(
                         _client!.email!,
-                        style: theme.textTheme.bodyMedium,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: isDarkMode ? Colors.white70 : Colors.grey[800],
+                        ),
                       ),
                     ],
                   ),
@@ -508,12 +592,15 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                       Icon(
                         Icons.phone,
                         size: 16,
-                        color: theme.colorScheme.onSurface.withOpacity(0.6),
+                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
                       ),
                       const SizedBox(width: 8),
                       Text(
                         _client!.phoneNumber!,
-                        style: theme.textTheme.bodyMedium,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: isDarkMode ? Colors.white70 : Colors.grey[800],
+                        ),
                       ),
                     ],
                   ),
@@ -525,12 +612,20 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     );
   }
 
-  Widget _buildTicketDetailsSection(Ticket ticket, ThemeData theme) {
-    return Container(
+  Widget _buildTicketDetailsSection(Ticket ticket, bool isDarkMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -540,38 +635,27 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Icon(
                 Icons.info,
                 size: 20,
-                color: theme.colorScheme.primary,
+                color: isDarkMode ? Colors.white : Colors.blue,
               ),
               const SizedBox(width: 8),
               Text(
                 'Détails du Ticket',
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black87,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          _DetailItem(
-            label: 'Type',
-            value: ticket.typeTicket,
-            icon: Icons.category,
-            theme: theme,
-          ),
-          _DetailItem(
-            label: 'Créé le',
-            value:
-                DateFormat('dd MMM yyyy • HH:mm').format(ticket.creationDate),
-            icon: Icons.calendar_today,
-            theme: theme,
-          ),
           if (ticket.assignedDate != null)
             _DetailItem(
               label: 'Assigné le',
               value: DateFormat('dd MMM yyyy • HH:mm')
                   .format(ticket.assignedDate!),
               icon: Icons.person_add,
-              theme: theme,
+              isDarkMode: isDarkMode,
             ),
           if (ticket.resolvedDate != null)
             _DetailItem(
@@ -579,7 +663,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               value: DateFormat('dd MMM yyyy • HH:mm')
                   .format(ticket.resolvedDate!),
               icon: Icons.check_circle,
-              theme: theme,
+              isDarkMode: isDarkMode,
             ),
           if (ticket.closedDate != null)
             _DetailItem(
@@ -587,19 +671,27 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               value:
                   DateFormat('dd MMM yyyy • HH:mm').format(ticket.closedDate!),
               icon: Icons.lock_clock,
-              theme: theme,
+              isDarkMode: isDarkMode,
             ),
         ],
       ),
     );
   }
 
-  Widget _buildTechniciansSection(Ticket ticket, ThemeData theme) {
-    return Container(
+  Widget _buildTechniciansSection(Ticket ticket, bool isDarkMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -609,13 +701,15 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Icon(
                 Icons.engineering,
                 size: 20,
-                color: theme.colorScheme.primary,
+                color: isDarkMode ? Colors.white : Colors.blue,
               ),
               const SizedBox(width: 8),
               Text(
                 'Techniciens Assignés',
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black87,
                 ),
               ),
             ],
@@ -633,7 +727,11 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                         if (tech != null) ...[
                           Text(
                             tech.fullName,
-                            style: theme.textTheme.titleMedium,
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                              color: isDarkMode ? Colors.white : Colors.black87,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           Row(
@@ -641,13 +739,19 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                               Icon(
                                 Icons.email,
                                 size: 16,
-                                color: theme.colorScheme.onSurface
-                                    .withOpacity(0.6),
+                                color: isDarkMode
+                                    ? Colors.white70
+                                    : Colors.grey[600],
                               ),
                               const SizedBox(width: 8),
                               Text(
                                 tech.email,
-                                style: theme.textTheme.bodyMedium,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  color: isDarkMode
+                                      ? Colors.white70
+                                      : Colors.grey[800],
+                                ),
                               ),
                             ],
                           ),
@@ -658,13 +762,19 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                                 Icon(
                                   Icons.phone,
                                   size: 16,
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.6),
+                                  color: isDarkMode
+                                      ? Colors.white70
+                                      : Colors.grey[600],
                                 ),
                                 const SizedBox(width: 8),
                                 Text(
                                   tech.phoneNumber!,
-                                  style: theme.textTheme.bodyMedium,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    color: isDarkMode
+                                        ? Colors.white70
+                                        : Colors.grey[800],
+                                  ),
                                 ),
                               ],
                             ),
@@ -672,7 +782,12 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                         ] else ...[
                           Text(
                             'Technicien ID: $techId',
-                            style: theme.textTheme.bodyMedium,
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: isDarkMode
+                                  ? Colors.white70
+                                  : Colors.grey[600],
+                            ),
                           ),
                         ],
                       ],
@@ -686,12 +801,20 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   }
 
   Widget _buildEquipmentSection(
-      String title, List<String> equipmentIds, IconData icon, ThemeData theme) {
-    return Container(
+      String title, List<String> equipmentIds, IconData icon, bool isDarkMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -701,31 +824,41 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Icon(
                 icon,
                 size: 20,
-                color: theme.colorScheme.primary,
+                color: isDarkMode ? Colors.white : Colors.blue,
               ),
               const SizedBox(width: 8),
               Text(
                 title,
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black87,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          ...equipmentIds
-              .map((equipmentId) => _buildEquipmentItem(equipmentId)),
+          ...equipmentIds.map(
+              (equipmentId) => _buildEquipmentItem(equipmentId, isDarkMode)),
         ],
       ),
     );
   }
 
-  Widget _buildAttachmentsSection(Ticket ticket, ThemeData theme) {
-    return Container(
+  Widget _buildAttachmentsSection(Ticket ticket, bool isDarkMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -735,13 +868,15 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               Icon(
                 Icons.attach_file,
                 size: 20,
-                color: theme.colorScheme.primary,
+                color: isDarkMode ? Colors.white : Colors.blue,
               ),
               const SizedBox(width: 8),
               Text(
                 'Pièces Jointes',
-                style: theme.textTheme.titleMedium?.copyWith(
+                style: GoogleFonts.poppins(
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black87,
                 ),
               ),
             ],
@@ -752,14 +887,27 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
             runSpacing: 8,
             children: ticket.fileUrls!
                 .map((file) => Chip(
-                      avatar: const Icon(Icons.attach_file, size: 18),
+                      avatar: Icon(
+                        Icons.attach_file,
+                        size: 18,
+                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      ),
                       label: Text(
                         file.split('/').last.length > 20
                             ? '${file.split('/').last.substring(0, 20)}...'
                             : file.split('/').last,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: isDarkMode ? Colors.white70 : Colors.grey[800],
+                        ),
                       ),
                       onDeleted: () => _downloadAttachment(file),
-                      deleteIcon: const Icon(Icons.download),
+                      deleteIcon: Icon(
+                        Icons.download,
+                        color: isDarkMode ? Colors.white70 : Colors.grey[600],
+                      ),
+                      backgroundColor:
+                          isDarkMode ? Colors.grey[800] : Colors.grey[200],
                     ))
                 .toList(),
           ),
@@ -768,26 +916,29 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     );
   }
 
-  Widget _buildAssignTechnicianSection(ThemeData theme) {
-    return Container(
+  Widget _buildAssignTechnicianSection(bool isDarkMode) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant,
-        border: Border(
-          top: BorderSide(
-            color: theme.dividerColor,
-            width: 1,
+        color: isDarkMode ? const Color(0xFF3A4352) : Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -4),
           ),
-        ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
             'ASSIGNER UN TECHNICIEN',
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: theme.colorScheme.primary,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
               fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.blue,
               letterSpacing: 0.5,
             ),
           ),
@@ -795,18 +946,19 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
           DropdownButtonFormField<String>(
             decoration: InputDecoration(
               labelText: 'Sélectionner un technicien',
+              labelStyle: GoogleFonts.poppins(
+                color: isDarkMode ? Colors.white70 : Colors.grey[600],
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: BorderSide(
-                  color: theme.colorScheme.outline,
+                  color: isDarkMode ? Colors.white70 : Colors.grey[400]!,
                 ),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 14,
-              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               filled: true,
-              fillColor: theme.colorScheme.surface,
+              fillColor: isDarkMode ? Colors.grey[800] : Colors.grey[100],
             ),
             value: _selectedTechnicianId,
             items: _technicians.map((tech) {
@@ -814,7 +966,10 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                 value: tech.id,
                 child: Text(
                   tech.fullName,
-                  style: theme.textTheme.bodyMedium,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: isDarkMode ? Colors.white : Colors.black87,
+                  ),
                 ),
               );
             }).toList(),
@@ -823,8 +978,11 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                 _selectedTechnicianId = value;
               });
             },
-            style: theme.textTheme.bodyMedium,
-            dropdownColor: theme.colorScheme.surface,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: isDarkMode ? Colors.white : Colors.black87,
+            ),
+            dropdownColor: isDarkMode ? Colors.grey[800] : Colors.white,
           ),
           const SizedBox(height: 16),
           ElevatedButton(
@@ -833,8 +991,8 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
               ),
-              backgroundColor: theme.colorScheme.primary,
-              foregroundColor: theme.colorScheme.onPrimary,
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
             ),
             onPressed: _isAssigning ? null : _assignTechnician,
             child: _isAssigning
@@ -846,7 +1004,13 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
                       color: Colors.white,
                     ),
                   )
-                : const Text('ASSIGNER LE TECHNICIEN'),
+                : Text(
+                    'ASSIGNER LE TECHNICIEN',
+                    style: GoogleFonts.poppins(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -866,7 +1030,7 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('Téléchargement de $fileUrl'),
-        backgroundColor: Theme.of(context).colorScheme.primary,
+        backgroundColor: Colors.blue,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -875,19 +1039,19 @@ class _AdminTicketDetailsPageState extends State<AdminTicketDetailsPage> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'Not Assigned':
-        return Colors.orange;
+        return const Color.fromARGB(255, 235, 203, 129); // Light pastel yellow
       case 'Assigned':
-        return Colors.blue;
+        return const Color(0xFFA1C7ED); // Light blue
       case 'In Progress':
-        return Colors.blueAccent;
+        return const Color(0xFFE3F2FD); // Pastel blue
       case 'Resolved':
-        return Colors.green;
+        return const Color(0xFFA6D490); // Light green
       case 'Closed':
-        return Colors.green.shade600;
+        return const Color(0xFFE0F7F6); // Mint pastel
       case 'Expired':
-        return Colors.red;
+        return const Color(0xFFFFEBEE); // Light pastel red
       default:
-        return Colors.grey;
+        return const Color(0xFFFAFAFA); // Off-white
     }
   }
 }
@@ -896,13 +1060,13 @@ class _DetailItem extends StatelessWidget {
   final String label;
   final String value;
   final IconData? icon;
-  final ThemeData theme;
+  final bool isDarkMode;
 
   const _DetailItem({
     required this.label,
     required this.value,
     this.icon,
-    required this.theme,
+    required this.isDarkMode,
   });
 
   @override
@@ -916,7 +1080,7 @@ class _DetailItem extends StatelessWidget {
             Icon(
               icon,
               size: 20,
-              color: theme.colorScheme.onSurface.withOpacity(0.6),
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
             ),
             const SizedBox(width: 12),
           ],
@@ -924,8 +1088,9 @@ class _DetailItem extends StatelessWidget {
             width: 100,
             child: Text(
               label,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: isDarkMode ? Colors.white70 : Colors.grey[600],
               ),
             ),
           ),
@@ -933,7 +1098,11 @@ class _DetailItem extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: theme.textTheme.bodyMedium,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: isDarkMode ? Colors.white : Colors.black87,
+              ),
+              maxLines: null,
             ),
           ),
         ],
@@ -945,16 +1114,17 @@ class _DetailItem extends StatelessWidget {
 class ErrorWidget extends StatelessWidget {
   final String error;
   final VoidCallback onRetry;
+  final bool isDarkMode;
 
   const ErrorWidget({
     required this.error,
     required this.onRetry,
+    required this.isDarkMode,
     Key? key,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -963,29 +1133,43 @@ class ErrorWidget extends StatelessWidget {
           Icon(
             Icons.error_outline,
             size: 48,
-            color: theme.colorScheme.error,
+            color: isDarkMode ? Colors.white : Colors.red,
           ),
           const SizedBox(height: 16),
           Text(
             'Erreur de chargement',
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: theme.colorScheme.error,
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black87,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             error,
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: isDarkMode ? Colors.white70 : Colors.grey[600],
+            ),
           ),
           const SizedBox(height: 24),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.errorContainer,
-              foregroundColor: theme.colorScheme.onErrorContainer,
+              backgroundColor: isDarkMode ? Colors.white : Colors.blue,
+              foregroundColor: isDarkMode ? Colors.black : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: onRetry,
-            child: const Text('Réessayer'),
+            child: Text(
+              'Réessayer',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),

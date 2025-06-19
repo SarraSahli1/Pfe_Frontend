@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:helpdeskfrontend/screens/Admin_Screens/Dashboard/admin_dashboard.dart';
-import 'package:helpdeskfrontend/screens/Admin_Screens/Users/admin_users_list.dart';
 import 'package:helpdeskfrontend/screens/Client_Screens/Dashboard/client_dashboard.dart';
+import 'package:helpdeskfrontend/screens/First_Screens/forgot_password_screen.dart';
 import 'package:helpdeskfrontend/screens/First_Screens/role_screen.dart';
 import 'package:helpdeskfrontend/screens/Technicien_Screens/tech_dashboard.dart';
 import 'package:helpdeskfrontend/services/auth_service.dart';
@@ -131,10 +131,13 @@ class _SignInScreenState extends State<SignInScreen> {
     );
   }
 
-  void _showError(String message) {
+  void _showError(String message, {bool isSuccess = false}) {
     if (!_isMounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isSuccess ? Colors.green : Colors.red,
+      ),
     );
   }
 
@@ -146,6 +149,7 @@ class _SignInScreenState extends State<SignInScreen> {
     required Color hintColor,
     required Color textColor,
     required Color backgroundColor,
+    bool obscureText = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20.0),
@@ -155,6 +159,7 @@ class _SignInScreenState extends State<SignInScreen> {
           Expanded(
             child: TextFormField(
               controller: controller,
+              obscureText: obscureText,
               style: GoogleFonts.poppins(
                 color: textColor,
                 fontSize: 14,
@@ -246,24 +251,39 @@ class _SignInScreenState extends State<SignInScreen> {
                               _buildTextField(
                                 label: 'Email',
                                 controller: _emailController,
-                                validator: (value) => value!.isEmpty
-                                    ? "Entrez votre email"
-                                    : null,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Entrez votre email';
+                                  }
+                                  if (!RegExp(
+                                          r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                                      .hasMatch(value)) {
+                                    return 'Email invalide';
+                                  }
+                                  return null;
+                                },
                                 hintColor: textColor.withOpacity(0.8),
                                 textColor: textColor,
                                 backgroundColor: colorScheme.surface,
                                 icon: Icons.email,
                               ),
                               _buildTextField(
-                                label: 'Password',
+                                label: 'Mot de passe',
                                 controller: _passwordController,
-                                validator: (value) => value!.isEmpty
-                                    ? "Entrez votre mot de passe"
-                                    : null,
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Entrez votre mot de passe';
+                                  }
+                                  if (value.length < 6) {
+                                    return 'Le mot de passe doit contenir au moins 6 caractères';
+                                  }
+                                  return null;
+                                },
                                 hintColor: textColor.withOpacity(0.8),
                                 textColor: textColor,
                                 backgroundColor: colorScheme.surface,
                                 icon: Icons.lock,
+                                obscureText: true,
                               ),
                               const SizedBox(height: 20),
                               Row(
@@ -271,23 +291,14 @@ class _SignInScreenState extends State<SignInScreen> {
                                     MainAxisAlignment.spaceBetween,
                                 children: [
                                   GestureDetector(
-                                    onTap: () async {
-                                      if (_emailController.text.isEmpty) {
-                                        _showError(
-                                            'Veuillez entrer votre email');
-                                        return;
-                                      }
-                                      final result =
-                                          await _authService.forgotPassword(
-                                        email: _emailController.text.trim(),
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const ForgotPasswordScreen(),
+                                        ),
                                       );
-                                      if (_isMounted) {
-                                        if (result['success']) {
-                                          _showError(result['message']);
-                                        } else {
-                                          _showError(result['message']);
-                                        }
-                                      }
                                     },
                                     child: Text(
                                       'Mot de passe oublié ?',
@@ -372,7 +383,7 @@ class _SignInScreenState extends State<SignInScreen> {
               ),
             ),
           ),
-          Positioned(
+          const Positioned(
             top: 10,
             right: 10,
             child: ThemeToggleButton(),
