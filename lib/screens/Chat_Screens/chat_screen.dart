@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:helpdeskfrontend/models/chat_message.dart';
+import 'package:helpdeskfrontend/screens/Chat_Screens/schedule_meeting_modal.dart';
 import 'package:helpdeskfrontend/services/chat_service.dart';
+import 'package:helpdeskfrontend/services/config.dart';
 import 'package:helpdeskfrontend/services/socket_service.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -13,6 +15,8 @@ import 'package:helpdeskfrontend/provider/theme_provider.dart';
 import 'package:helpdeskfrontend/widgets/theme_toggle_button.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class ChatScreen extends StatefulWidget {
   final String ticketId;
@@ -41,6 +45,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final ImagePicker _picker = ImagePicker();
   DateTime _lastScrollTime = DateTime.now();
   final Duration _scrollDebounceDuration = const Duration(milliseconds: 100);
+  ScaffoldMessengerState? _scaffoldMessenger;
+  String? _userRole;
 
   @override
   void initState() {
@@ -63,6 +69,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _socketService.addNotificationListener(_handleSocketMessage);
     _loadChat();
+    _fetchUserRole();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -71,6 +78,138 @@ class _ChatScreenState extends State<ChatScreen> {
         notificationProvider.markAllAsReadForTicket(widget.ticketId);
       }
     });
+  }
+
+  Future<void> _fetchUserRole() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final role = prefs.getString('userRole');
+      if (role != null) {
+        if (mounted) {
+          setState(() {
+            _userRole = role;
+          });
+        }
+        return;
+      }
+
+      final response = await http.get(
+        Uri.parse('${Config.baseUrl}/user/role/${widget.currentUserId}'),
+        headers: {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final fetchedRole = data['role']?.toString() ?? 'client';
+        await prefs.setString('userRole', fetchedRole);
+        if (mounted) {
+          setState(() {
+            _userRole = fetchedRole;
+          });
+        }
+      } else {
+        debugPrint('[ChatScreen] Failed to fetch role: ${response.body}');
+        if (mounted) {
+          setState(() {
+            _userRole = 'client';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Error fetching role: $e');
+      if (mounted) {
+        setState(() {
+          _userRole = 'client';
+        });
+      }
+    }
+  }
+
+  Future<void> _scheduleMeeting(
+      DateTime scheduledDate, int duration, String? message) async {
+    try {
+      final meetingMessage = await _chatService.scheduleMeeting(
+        ticketId: widget.ticketId,
+        senderId: widget.currentUserId,
+        scheduledDate: scheduledDate,
+        duration: duration,
+        message: message,
+        token: widget.token,
+      );
+
+      if (mounted) {
+        setState(() {
+          if (!_messages.any((msg) => msg.id == meetingMessage.id)) {
+            _messages.add(meetingMessage);
+            debugPrint(
+                '[ChatScreen] Scheduled and added meeting message: ${meetingMessage.id}');
+          }
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted && _scaffoldMessenger != null) {
+        _scaffoldMessenger!.showSnackBar(
+          SnackBar(content: Text('Failed to schedule meeting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _acceptMeeting(String meetingMessageId) async {
+    try {
+      final message = await _chatService.acceptMeeting(
+        ticketId: widget.ticketId,
+        meetingMessageId: meetingMessageId,
+        senderId: widget.currentUserId,
+        token: widget.token,
+      );
+
+      if (mounted) {
+        setState(() {
+          if (!_messages.any((msg) => msg.id == message.id)) {
+            _messages.add(message);
+            debugPrint(
+                '[ChatScreen] Accepted and added message: ${message.id}');
+          }
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted && _scaffoldMessenger != null) {
+        _scaffoldMessenger!.showSnackBar(
+          SnackBar(content: Text('Failed to accept meeting: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _declineMeeting(String meetingMessageId) async {
+    try {
+      final message = await _chatService.declineMeeting(
+        ticketId: widget.ticketId,
+        meetingMessageId: meetingMessageId,
+        senderId: widget.currentUserId,
+        token: widget.token,
+      );
+
+      if (mounted) {
+        setState(() {
+          if (!_messages.any((msg) => msg.id == message.id)) {
+            _messages.add(message);
+            debugPrint(
+                '[ChatScreen] Declined and added message: ${message.id}');
+          }
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted && _scaffoldMessenger != null) {
+        _scaffoldMessenger!.showSnackBar(
+          SnackBar(content: Text('Failed to decline meeting: $e')),
+        );
+      }
+    }
   }
 
   void _handleSocketMessage(Map<String, dynamic> data) {
@@ -299,6 +438,15 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildMessageBubble(ChatMessage message, bool isDarkMode) {
     final isCurrentUser = message.senderId == widget.currentUserId;
+    final isClient = _userRole == 'client';
+    final isPendingMeeting = message.isMeeting &&
+        message.meetingDetails != null &&
+        message.meetingDetails!.status == 'pending';
+    final canShowButtons = _userRole == 'client' &&
+        message.isMeeting &&
+        message.meetingDetails != null &&
+        message.meetingDetails!.status == 'pending' &&
+        !message.meetingDetails!.respondedByClient;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -402,7 +550,116 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ),
                     ),
-                  if (message.message != null && message.message!.isNotEmpty)
+                  if (message.isMeeting && message.meetingDetails != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: isDarkMode ? Colors.black26 : Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            message.meetingDetails!.status == 'accepted'
+                                ? 'Meeting Accepted'
+                                : message.meetingDetails!.status == 'declined'
+                                    ? 'Meeting Declined'
+                                    : 'Meeting Scheduled',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              color: isCurrentUser
+                                  ? Colors.white
+                                  : isDarkMode
+                                      ? Colors.white70
+                                      : Colors.black87,
+                            ),
+                          ),
+                          if (message.meetingDetails!.status == 'pending') ...[
+                            Text(
+                              'Date: ${DateFormat('MMM dd, yyyy HH:mm').format(message.meetingDetails!.scheduledDate)}',
+                              style: GoogleFonts.poppins(
+                                color: isCurrentUser
+                                    ? Colors.white70
+                                    : isDarkMode
+                                        ? Colors.white70
+                                        : Colors.black87,
+                              ),
+                            ),
+                            Text(
+                              'Duration: ${message.meetingDetails!.duration} minutes',
+                              style: GoogleFonts.poppins(
+                                color: isCurrentUser
+                                    ? Colors.white70
+                                    : isDarkMode
+                                        ? Colors.white70
+                                        : Colors.black87,
+                              ),
+                            ),
+                          ],
+                          Text(
+                            'Status: ${message.meetingDetails!.status}',
+                            style: GoogleFonts.poppins(
+                              color: isCurrentUser
+                                  ? Colors.white70
+                                  : isDarkMode
+                                      ? Colors.white70
+                                      : Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (message.message != null && message.message!.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          message.message!,
+                          style: GoogleFonts.poppins(
+                            color: isCurrentUser
+                                ? Colors.white
+                                : isDarkMode
+                                    ? Colors.white70
+                                    : const Color(0xFF303437),
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    if (canShowButtons)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            ElevatedButton(
+                              onPressed: () => _acceptMeeting(message.id),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text('Accept'),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: () => _declineMeeting(message.id),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: const Text('Decline'),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ] else if (message.message != null &&
+                      message.message!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4.0),
                       child: Text(
@@ -717,6 +974,23 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               onPressed: _pickFiles,
                             ),
+                            if (_userRole == 'technician')
+                              IconButton(
+                                icon: Icon(
+                                  Icons.access_time,
+                                  color: isDarkMode
+                                      ? Colors.white70
+                                      : const Color(0xFF628ff6),
+                                ),
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => ScheduleMeetingModal(
+                                      onSchedule: _scheduleMeeting,
+                                    ),
+                                  );
+                                },
+                              ),
                             Expanded(
                               child: TextField(
                                 controller: _messageController,

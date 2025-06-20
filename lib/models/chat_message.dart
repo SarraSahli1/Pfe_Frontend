@@ -1,4 +1,40 @@
 // chat_message.dart
+import 'package:helpdeskfrontend/models/user.dart';
+
+class MeetingDetails {
+  final DateTime scheduledDate;
+  final int duration;
+  final String status;
+  final bool respondedByClient; // Added to track client response
+
+  MeetingDetails({
+    required this.scheduledDate,
+    required this.duration,
+    required this.status,
+    this.respondedByClient = false,
+  });
+
+  factory MeetingDetails.fromJson(Map<String, dynamic> json) {
+    return MeetingDetails(
+      scheduledDate: DateTime.parse(json['scheduledDate']?.toString() ??
+          DateTime.now().toIso8601String()),
+      duration: (json['duration'] is int
+              ? json['duration']
+              : int.tryParse(json['duration']?.toString() ?? '0')) ??
+          0,
+      status: json['status']?.toString() ?? 'pending',
+      respondedByClient: json['respondedByClient'] as bool? ?? false,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'scheduledDate': scheduledDate.toIso8601String(),
+        'duration': duration,
+        'status': status,
+        'respondedByClient': respondedByClient,
+      };
+}
+
 class ChatMessage {
   final String id;
   final String senderId;
@@ -7,6 +43,8 @@ class ChatMessage {
   final DateTime createdAt;
   final DateTime updatedAt;
   final User sender;
+  final bool isMeeting;
+  final MeetingDetails? meetingDetails;
 
   ChatMessage({
     required this.id,
@@ -16,6 +54,8 @@ class ChatMessage {
     required this.createdAt,
     required this.updatedAt,
     required this.sender,
+    this.isMeeting = false,
+    this.meetingDetails,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -30,6 +70,11 @@ class ChatMessage {
       createdAt: DateTime.parse(json['createdAt']),
       updatedAt: DateTime.parse(json['updatedAt']),
       sender: User.fromJson(json['sender']),
+      isMeeting: json['isMeeting'] as bool? ?? false,
+      meetingDetails: json['meetingDetails'] != null
+          ? MeetingDetails.fromJson(
+              json['meetingDetails'] as Map<String, dynamic>)
+          : null,
     );
   }
 }

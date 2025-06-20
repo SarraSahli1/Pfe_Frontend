@@ -85,4 +85,98 @@ class ChatService {
         return 'application/octet-stream';
     }
   }
+
+  Future<ChatMessage> scheduleMeeting({
+    required String ticketId,
+    required String senderId,
+    required DateTime scheduledDate,
+    required int duration,
+    String? message,
+    required String token,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${Config.baseUrl}/chat/$ticketId/schedule-meeting'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'senderId': senderId,
+          'scheduledDate': scheduledDate.toIso8601String(),
+          'duration': duration,
+          'message': message,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        return ChatMessage.fromJson(json.decode(response.body)['data']);
+      } else {
+        throw Exception('Failed to schedule meeting: ${response.body}');
+      }
+    } catch (e) {
+      print('[ChatService] Error scheduling meeting: $e');
+      rethrow;
+    }
+  }
+
+  Future<ChatMessage> acceptMeeting({
+    required String ticketId,
+    required String meetingMessageId,
+    required String senderId,
+    required String token,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(
+            '${Config.baseUrl}/chat/$ticketId/meeting/$meetingMessageId/accept'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'senderId': senderId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return ChatMessage.fromJson(json.decode(response.body)['data']);
+      } else {
+        throw Exception('Failed to accept meeting: ${response.body}');
+      }
+    } catch (e) {
+      print('[ChatService] Error accepting meeting: $e');
+      rethrow;
+    }
+  }
+
+  Future<ChatMessage> declineMeeting({
+    required String ticketId,
+    required String meetingMessageId,
+    required String senderId,
+    required String token,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(
+            '${Config.baseUrl}/chat/$ticketId/meeting/$meetingMessageId/decline'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'senderId': senderId,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        return ChatMessage.fromJson(json.decode(response.body)['data']);
+      } else {
+        throw Exception('Failed to decline meeting: ${response.body}');
+      }
+    } catch (e) {
+      print('[ChatService] Error declining meeting: $e');
+      rethrow;
+    }
+  }
 }

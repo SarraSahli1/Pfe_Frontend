@@ -92,7 +92,7 @@ class User {
         email: map['email'],
         password: map['password'],
         phoneNumber: map['phoneNumber'],
-        authority: map['authority'],
+        authority: map['authority'] ?? map['__t'], // Fallback to __t
         image: map['image'] != null
             ? (map['image'] is Map<String, dynamic>
                 ? UserImage.fromMap(map['image'] as Map<String, dynamic>)

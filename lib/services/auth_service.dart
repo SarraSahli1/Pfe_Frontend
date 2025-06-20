@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:helpdeskfrontend/services/config.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
@@ -221,6 +222,28 @@ class AuthService {
         'success': false,
         'message': 'Erreur réseau: $e',
       };
+    }
+  }
+
+  Future<String?> getUserRoleWithId(String userId, String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${Config.baseUrl}/user/role/$userId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['role'] as String?;
+      } else {
+        throw Exception('Failed to fetch user role: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error fetching user role: $e');
+      return null; // Return null instead of throwing to simplify error handling
     }
   }
 }

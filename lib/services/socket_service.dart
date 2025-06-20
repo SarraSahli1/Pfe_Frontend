@@ -322,6 +322,8 @@ class SocketService {
               DateTime.now().toIso8601String(),
           'listOfFiles':
               message['listOfFiles'] is List ? message['listOfFiles'] : [],
+          'isMeeting': message['isMeeting'] ?? false,
+          'meetingDetails': message['meetingDetails'],
         },
       };
     } catch (e) {
@@ -336,6 +338,8 @@ class SocketService {
           'sender': {'_id': '', 'firstName': 'Unknown', 'image': null},
           'createdAt': DateTime.now().toIso8601String(),
           'listOfFiles': [],
+          'isMeeting': false,
+          'meetingDetails': null,
         },
       };
     }
@@ -418,6 +422,8 @@ class SocketService {
                       })
                   .toList()
               : [],
+          'isMeeting': data['isMeeting'] ?? false,
+          'meetingDetails': data['meetingDetails'],
         };
 
         _handleEvent('chat:$ticketId', {
@@ -430,6 +436,63 @@ class SocketService {
         debugPrint('[SOCKET] Error processing chat:$ticketId event: $e');
       }
     });
+
+    // Handle meeting-scheduled events for the ticket
+    _socket!.off('meeting-scheduled:$ticketId');
+    _socket!.on('meeting-scheduled:$ticketId', (data) {
+      debugPrint('[SOCKET] Received meeting-scheduled:$ticketId event: $data');
+      try {
+        final messageData = {
+          '_id': data['_id']?.toString() ?? '',
+          'message': data['message']?.toString() ?? 'Meeting scheduled',
+          'sender': {
+            '_id': data['sender']?['_id']?.toString() ?? '',
+            'firstName': data['sender']?['firstName']?.toString() ?? 'Unknown',
+            'image': data['sender']?['image'] != null
+                ? {
+                    '_id': data['sender']['image']['_id']?.toString() ?? '',
+                    'fileName':
+                        data['sender']['image']['fileName']?.toString() ?? '',
+                    'path': data['sender']['image']['path']?.toString() ?? '',
+                    'title': data['sender']['image']['title']?.toString() ?? '',
+                  }
+                : null,
+          },
+          'createdAt':
+              data['createdAt']?.toString() ?? DateTime.now().toIso8601String(),
+          'updatedAt':
+              data['updatedAt']?.toString() ?? DateTime.now().toIso8601String(),
+          'listOfFiles': data['listOfFiles'] is List
+              ? (data['listOfFiles'] as List)
+                  .map((file) => {
+                        '_id': file['_id']?.toString() ?? '',
+                        'fileName': file['fileName']?.toString() ?? '',
+                        'path': file['path']?.toString() ?? '',
+                        'title': file['title']?.toString() ?? '',
+                      })
+                  .toList()
+              : [],
+          'isMeeting': data['isMeeting'] ?? true,
+          'meetingDetails': data['meetingDetails'] ??
+              {
+                'scheduledDate': DateTime.now().toIso8601String(),
+                'duration': 0,
+                'status': 'pending',
+              },
+        };
+
+        _handleEvent('meeting-scheduled:$ticketId', {
+          'event': 'meeting-scheduled:$ticketId',
+          'ticketId': ticketId,
+          'type': 'meeting_scheduled',
+          'message': messageData,
+          'activeTicketId': _activeTicketId,
+        });
+      } catch (e) {
+        debugPrint(
+            '[SOCKET] Error processing meeting-scheduled:$ticketId event: $e');
+      }
+    });
   }
 
   void unsubscribeFromTicket(String ticketId) {
@@ -437,6 +500,7 @@ class SocketService {
     if (_socket?.connected == true) {
       _socket!.emit('unsubscribe-from-chat', ticketId);
       _socket!.off('chat:$ticketId');
+      _socket!.off('meeting-scheduled:$ticketId');
       debugPrint('[SOCKET] Unsubscribed from ticket: $ticketId');
     }
   }
@@ -447,6 +511,7 @@ class SocketService {
           '[SOCKET] Resubscribing to ${_subscribedTickets.length} tickets');
       for (var ticketId in List.from(_subscribedTickets)) {
         _socket!.off('chat:$ticketId');
+        _socket!.off('meeting-scheduled:$ticketId');
         subscribeToTicket(ticketId);
         debugPrint('[SOCKET] Resubscribed to ticket: $ticketId');
       }
